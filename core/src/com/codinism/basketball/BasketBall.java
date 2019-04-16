@@ -3,28 +3,33 @@ package com.codinism.basketball;
 import com.badlogic.gdx.ApplicationAdapter;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.InputProcessor;
+import com.badlogic.gdx.audio.Music;
+import com.badlogic.gdx.audio.Sound;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.Sprite;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
+import com.badlogic.gdx.input.GestureDetector;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.math.Vector3;
 import com.badlogic.gdx.physics.box2d.Body;
 import com.badlogic.gdx.physics.box2d.BodyDef;
 import com.badlogic.gdx.physics.box2d.Box2DDebugRenderer;
 import com.badlogic.gdx.physics.box2d.CircleShape;
+import com.badlogic.gdx.physics.box2d.Contact;
+import com.badlogic.gdx.physics.box2d.ContactImpulse;
+import com.badlogic.gdx.physics.box2d.ContactListener;
 import com.badlogic.gdx.physics.box2d.Fixture;
 import com.badlogic.gdx.physics.box2d.FixtureDef;
+import com.badlogic.gdx.physics.box2d.Manifold;
 import com.badlogic.gdx.physics.box2d.PolygonShape;
 import com.badlogic.gdx.physics.box2d.World;
 
-public class BasketBall extends ApplicationAdapter implements InputProcessor {
+public class BasketBall extends ApplicationAdapter implements GestureDetector.GestureListener, ContactListener {
 
-    SpriteBatch batch;
-    Texture img;
-
-    public static float PIXEL_PER_METER = 100;
+    private SpriteBatch batch;
+    private Texture img;
 
     private World world;
     private OrthographicCamera camera;
@@ -41,6 +46,12 @@ public class BasketBall extends ApplicationAdapter implements InputProcessor {
     private Vector3 startVector;
     private Fixture groundFix;
     private boolean groundScale;
+    private boolean topOfBasket;
+    private Music shootSound;
+    private Music dropSound;
+    private Music croowedSound;
+    private boolean updatedGround;
+    private Fixture groundFixTop;
 
     private float convertToWorld(float px) {
         return px / 100;
@@ -51,7 +62,6 @@ public class BasketBall extends ApplicationAdapter implements InputProcessor {
     }
 
     @Override
-
     public void create() {
         batch = new SpriteBatch();
         world = new World(new Vector2(0, -10f), true);
@@ -64,8 +74,16 @@ public class BasketBall extends ApplicationAdapter implements InputProcessor {
         ballSprite = new Sprite(new Texture(Gdx.files.internal("ball.png")), 141, 158);
         basketEmpty = new Sprite(new Texture(Gdx.files.internal("0.png")), 82, 177);
 
-        goalPostSprite = new Sprite(new Texture(Gdx.files.internal("goalpost.png")), 147, 128);
+        goalPostSprite = new Sprite(new Texture(Gdx.files.internal("goalpost.png")), 720, 1280);
 
+
+        //sound
+        shootSound = Gdx.audio.newMusic(Gdx.files.internal("audio/shoot.mp3"));
+        shootSound.setLooping(false);
+        dropSound = Gdx.audio.newMusic(Gdx.files.internal("audio/drop.mp3"));
+        dropSound.setLooping(false);
+        croowedSound = Gdx.audio.newMusic(Gdx.files.internal("audio/croowed.mp3"));
+        croowedSound.setLooping(false);
 
         createBall();
 
@@ -116,8 +134,18 @@ public class BasketBall extends ApplicationAdapter implements InputProcessor {
 // Create a fixture from our polygon shape and add it to our ground body
         groundFix = groundBody.createFixture(groundBox, 0.0f);
 
-        Gdx.input.setInputProcessor(this);
+        Body groundBodyTop = world.createBody(groundBodyDef);
+        groundBox.setAsBox(camera.viewportWidth, 3.8f);
 
+        FixtureDef fixtureDef1 = new FixtureDef();
+        fixtureDef1.density = 0;
+        fixtureDef1.isSensor = true;
+        fixtureDef1.shape = groundBox;
+
+        groundFixTop = groundBodyTop.createFixture(fixtureDef1);
+
+        Gdx.input.setInputProcessor(new GestureDetector(this));
+        world.setContactListener(this);
     }
 
     private void createBall() {
@@ -133,7 +161,7 @@ public class BasketBall extends ApplicationAdapter implements InputProcessor {
 
 // Create a circle shape and set its radius to 6
         CircleShape circle = new CircleShape();
-        circle.setRadius(convertToWorld(79));
+        circle.setRadius(convertToWorld(60));
 
 // Create a fixture definition to apply our shape to
         FixtureDef fixtureDef = new FixtureDef();
@@ -154,9 +182,10 @@ public class BasketBall extends ApplicationAdapter implements InputProcessor {
         batch.draw(basketEmpty, 40, 400, basketEmpty.getWidth(), basketEmpty.getHeight());
 
 
-        if (ballBody.getPosition().y > leftBody.getPosition().y) {
+        if (ballBody.getPosition().y - convertToWorld(35) > leftBody.getPosition().y) {
             leftBody.getFixtureList().get(0).setSensor(false);
             rightBody.getFixtureList().get(0).setSensor(false);
+            topOfBasket = true;
         } else {
             leftBody.getFixtureList().get(0).setSensor(true);
             rightBody.getFixtureList().get(0).setSensor(true);
@@ -169,23 +198,23 @@ public class BasketBall extends ApplicationAdapter implements InputProcessor {
                 convertToBox(ballBody.getPosition().y - r),
                 convertToBox(r) * 2, convertToBox(r) * 2);
 
-        batch.end();
+        if (topOfBasket) {
+            if (ballBody.getLinearVelocity().y == 0) {
+                topOfBasket = false;
+                ballBody.getWorld().destroyBody(ballBody);
 
-        if (groundScale) {
-            PolygonShape ps = (PolygonShape) groundFix.getShape();
-            if (ballBody.getPosition().y < 3.8) {
-                ps.setAsBox(camera.viewportWidth, ballBody.getPosition().y + 0.1f);
+                groundFixTop.setSensor(true);
+
+                createBall();
+                groundScale = false;
+                updatedGround = false;
+            } else {
+                batch.draw(goalPostSprite, 0, 0, Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
+                groundFixTop.setSensor(false);
             }
         }
 
-        if (ballBody.getPosition().x > convertToWorld(Gdx.graphics.getWidth()) || ballBody.getPosition().x < convertToWorld(20)) {
-            ballBody.getWorld().destroyBody(ballBody);
-            createBall();
-            groundScale = false;
-            PolygonShape ps = (PolygonShape) groundFix.getShape();
-            ps.setAsBox(camera.viewportWidth, convertToWorld(49));
-        }
-
+        batch.end();
 
         debugRender.render(world, camera.combined);
         world.step(1 / 60f, 6, 2);
@@ -194,75 +223,112 @@ public class BasketBall extends ApplicationAdapter implements InputProcessor {
     @Override
     public void dispose() {
         batch.dispose();
+        dropSound.dispose();
+        croowedSound.dispose();
+        shootSound.dispose();
     }
 
     @Override
-    public boolean keyDown(int keycode) {
+    public boolean touchDown(float x, float y, int pointer, int button) {
         return false;
     }
 
     @Override
-    public boolean keyUp(int keycode) {
+    public boolean tap(float x, float y, int count, int button) {
         return false;
     }
 
     @Override
-    public boolean keyTyped(char character) {
+    public boolean longPress(float x, float y) {
         return false;
     }
 
     @Override
-    public boolean touchDown(int screenX, int screenY, int pointer, int button) {
-        Gdx.app.log("touchDown", "x: " + screenX + " Y: " + screenY);
+    public boolean fling(float velocityX, float velocityY, int button) {
 
-        isDown = true;
-        startVector = new Vector3(screenX, screenY, 0);
-        camera.unproject(startVector);
-        Gdx.app.log("IN World", "x: " + startVector.x + " Y: " + startVector.y);
-        return false;
-    }
+        if (Math.abs(velocityX) > Math.abs(velocityY)) {
+            if (velocityX > 0) {
 
-    @Override
-    public boolean touchUp(int screenX, int screenY, int pointer, int button) {
-        Gdx.app.log("tochUp", "x: " + screenX + " Y: " + screenY);
-        Vector3 touchPos = new Vector3(screenX, screenY, 0);
-        camera.unproject(touchPos);
-        Gdx.app.log("IN World", "x: " + touchPos.x + " Y: " + touchPos.y);
-        if (isDown) {
+            } else {
 
-            float speed = 5f;
-
-            Vector2 endVector = new Vector2(touchPos.x, touchPos.y);
-            Vector2 startVector2 = new Vector2(startVector.x, startVector.y);
-
-            float angle = endVector.angleRad(startVector2);
-            Gdx.app.log("ANgle", "" + angle);
-
-            Vector2 initialVelocity = new Vector2(startVector2.x - endVector.x, startVector2.y - endVector.y * 10);
-            initialVelocity.rotate(angle);
-            ballBody.setLinearVelocity(initialVelocity);
-            ballBody.getFixtureList().get(0).getShape().setRadius(convertToWorld(35));
-
-            groundScale = true;
-
+            }
         } else {
-            isDown = false;
+            if (velocityY > 0) {
+
+            } else {
+                if (ballBody.getLinearVelocity().y == 0) {
+                    shootSound.play();
+                    Gdx.app.log("Fling", "x: " + velocityX + " y:  " + velocityY);
+                    Vector2 initialVelocity = new Vector2(8.5f, 8.5f);
+                    initialVelocity.rotate(45);
+                    ballBody.setLinearVelocity(initialVelocity);
+                    ballBody.getFixtureList().get(0).getShape().setRadius(convertToWorld(35));
+                }
+            }
         }
+
+        return false;
+    }
+
+    private float normalize(float value, float min, float max) {
+        return (value - min) / (max - min);
+    }
+
+
+    @Override
+    public boolean pan(float x, float y, float deltaX, float deltaY) {
         return false;
     }
 
     @Override
-    public boolean touchDragged(int screenX, int screenY, int pointer) {
+    public boolean panStop(float x, float y, int pointer, int button) {
         return false;
     }
 
     @Override
-    public boolean mouseMoved(int screenX, int screenY) {
+    public boolean zoom(float initialDistance, float distance) {
         return false;
     }
 
     @Override
-    public boolean scrolled(int amount) {
+    public boolean pinch(Vector2 initialPointer1, Vector2 initialPointer2, Vector2 pointer1, Vector2 pointer2) {
         return false;
+    }
+
+    @Override
+    public void pinchStop() {
+
+    }
+
+    @Override
+    public void beginContact(Contact contact) {
+        Fixture A = contact.getFixtureA();
+        Fixture B = contact.getFixtureB();
+
+        if (A.getBody().getType() == BodyDef.BodyType.KinematicBody) {
+            if (!dropSound.isPlaying()) {
+                dropSound.play();
+            }
+        } else if (B.getBody().getType() == BodyDef.BodyType.KinematicBody) {
+            if (!dropSound.isPlaying()) {
+                dropSound.play();
+            }
+        }
+
+    }
+
+    @Override
+    public void endContact(Contact contact) {
+
+    }
+
+    @Override
+    public void preSolve(Contact contact, Manifold oldManifold) {
+
+    }
+
+    @Override
+    public void postSolve(Contact contact, ContactImpulse impulse) {
+
     }
 }
