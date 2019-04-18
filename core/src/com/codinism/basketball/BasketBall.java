@@ -2,9 +2,7 @@ package com.codinism.basketball;
 
 import com.badlogic.gdx.ApplicationAdapter;
 import com.badlogic.gdx.Gdx;
-import com.badlogic.gdx.InputProcessor;
 import com.badlogic.gdx.audio.Music;
-import com.badlogic.gdx.audio.Sound;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.Texture;
@@ -25,7 +23,7 @@ import com.badlogic.gdx.physics.box2d.FixtureDef;
 import com.badlogic.gdx.physics.box2d.Manifold;
 import com.badlogic.gdx.physics.box2d.PolygonShape;
 import com.badlogic.gdx.physics.box2d.World;
-import com.badlogic.gdx.utils.viewport.FitViewport;
+import com.badlogic.gdx.utils.viewport.StretchViewport;
 
 public class BasketBall extends ApplicationAdapter implements GestureDetector.GestureListener, ContactListener {
 
@@ -53,7 +51,7 @@ public class BasketBall extends ApplicationAdapter implements GestureDetector.Ge
     private Music croowedSound;
     private boolean updatedGround;
     private Fixture groundFixTop;
-    private FitViewport viewPort;
+    private StretchViewport viewPort;
 
     public static int V_WIDTH = 480;
     public static int V_HEIGHT = 640;
@@ -62,6 +60,10 @@ public class BasketBall extends ApplicationAdapter implements GestureDetector.Ge
     private float RIM_RADIOS = 0.02f;
     private float GROUND_Y = 0.5f;
     private float UPPER_GROUND_Y = 2.5f;
+    private Vector3 point;
+    private Body bodyThatWasHit;
+    private boolean wasTouched;
+    private Vector3 point2;
 
     private float convertToWorld(float px) {
         return px / 100;
@@ -75,10 +77,12 @@ public class BasketBall extends ApplicationAdapter implements GestureDetector.Ge
     public void create() {
         batch = new SpriteBatch();
         world = new World(new Vector2(0, -10f), true);
-        camera = new OrthographicCamera(V_WIDTH / 100f, V_HEIGHT / 100f);
-        camera.position.set(camera.viewportWidth / 2f, camera.viewportHeight / 2f, 0);
+        camera = new OrthographicCamera(4.8f, 6.4f);
+        camera.setToOrtho(false);
 
         debugRender = new Box2DDebugRenderer();
+        point = new Vector3();
+        point2 = new Vector3();
 
         img = new Texture(Gdx.files.internal("single basket.png"));
         backSprite = new Sprite(img, 720, 1280);
@@ -108,22 +112,18 @@ public class BasketBall extends ApplicationAdapter implements GestureDetector.Ge
         FixtureDef fixtureDef = new FixtureDef();
 
         bodyDef.type = BodyDef.BodyType.StaticBody;
-        bodyDef.position.set(camera.viewportWidth / 2.5f, camera.viewportHeight / 1.4f);
+        bodyDef.position.set(camera.viewportWidth / 2.7f, camera.viewportHeight / 1.4f);
         leftBody = world.createBody(bodyDef);
         circle.setRadius(RIM_RADIOS);
         fixtureDef.shape = circle;
-        fixtureDef.density = 0.5f;
-        fixtureDef.friction = 0.4f;
-        fixtureDef.restitution = 0.3f; // Make it bounce a little bit
+        fixtureDef.density = 1f;
+        fixtureDef.friction = 1f;
+        fixtureDef.restitution = 0.2f; // Make it bounce a little bit
         fixtureDef.isSensor = true;
         leftBody.createFixture(fixtureDef);
 
         bodyDef.position.set(leftBody.getPosition().x + 2 * 0.6f, leftBody.getPosition().y);
         rightBody = world.createBody(bodyDef);
-        fixtureDef.shape = circle;
-        fixtureDef.density = 0.5f;
-        fixtureDef.friction = 0.4f;
-        fixtureDef.restitution = 0.3f; // Make it bounce a little bit
         rightBody.createFixture(fixtureDef);
 
 
@@ -196,7 +196,7 @@ public class BasketBall extends ApplicationAdapter implements GestureDetector.Ge
 //        batch.draw(basketEmpty, 10, 200, basketEmpty.getWidth(), basketEmpty.getHeight());
 
 
-        if (ballBody.getPosition().y - convertToWorld(35) > leftBody.getPosition().y) {
+        if (ballBody.getPosition().y - 0.36f > leftBody.getPosition().y) {
             leftBody.getFixtureList().get(0).setSensor(false);
             rightBody.getFixtureList().get(0).setSensor(false);
             topOfBasket = true;
@@ -215,11 +215,13 @@ public class BasketBall extends ApplicationAdapter implements GestureDetector.Ge
         if (topOfBasket) {
             if (ballBody.getLinearVelocity().y == 0) {
                 topOfBasket = false;
+
                 ballBody.getWorld().destroyBody(ballBody);
 
                 groundFixTop.setSensor(true);
 
                 createBall();
+
                 groundScale = false;
                 updatedGround = false;
             } else {
@@ -228,9 +230,23 @@ public class BasketBall extends ApplicationAdapter implements GestureDetector.Ge
             }
         }
 
+        if (ballBody.getPosition().x < 0 || ballBody.getPosition().x > 4.8) {
+            topOfBasket = false;
+
+            ballBody.getWorld().destroyBody(ballBody);
+
+            groundFixTop.setSensor(true);
+
+            createBall();
+
+            groundScale = false;
+            updatedGround = false;
+        }
+
         batch.end();
 
         debugRender.render(world, camera.combined);
+
         world.step(1 / 60f, 6, 2);
     }
 
@@ -244,6 +260,10 @@ public class BasketBall extends ApplicationAdapter implements GestureDetector.Ge
 
     @Override
     public boolean touchDown(float x, float y, int pointer, int button) {
+        point.set(x, y, 0); // Translate to world coordinates.
+        camera.unproject(point);
+        wasTouched = ballBody.getFixtureList().first().testPoint(point.x, point.y);
+
         return false;
     }
 
@@ -260,6 +280,9 @@ public class BasketBall extends ApplicationAdapter implements GestureDetector.Ge
     @Override
     public boolean fling(float velocityX, float velocityY, int button) {
 
+        Gdx.app.log("Fling", "Stop");
+
+
         if (Math.abs(velocityX) > Math.abs(velocityY)) {
             if (velocityX > 0) {
 
@@ -270,16 +293,17 @@ public class BasketBall extends ApplicationAdapter implements GestureDetector.Ge
             if (velocityY > 0) {
 
             } else {
-                if (ballBody.getLinearVelocity().y == 0) {
+                if (wasTouched) {
+                    if (ballBody.getLinearVelocity().y == 0) {
+
 //                    shootSound.play();
-                    Vector3 vector3 = new Vector3(velocityX, velocityY, 0);
-                    camera.unproject(vector3);
-                    Gdx.app.log("Fling", "x: " + vector3.x + " y:  " + vector3.y);
-                    float angle = ballBody.getPosition().angleRad(new Vector2(vector3.x, vector3.y));
-                    Vector2 initialVelocity = new Vector2(6.4f, 6.4f);
-                    initialVelocity.rotate(45 + angle);
-                    ballBody.setLinearVelocity(initialVelocity);
-                    ballBody.getFixtureList().get(0).getShape().setRadius(convertToWorld(35));
+                        Vector2 initialVelocity = normalize(new Vector2(point2.x, point2.y),
+                                new Vector2(point.x, point.y));
+                        Gdx.app.log("Angle", "" + initialVelocity.x + ", " + initialVelocity.y);
+                        ballBody.setLinearVelocity(initialVelocity.x * 15, initialVelocity.y * 15);
+                        ballBody.setLinearDamping(0.98f);
+                        ballBody.getFixtureList().get(0).getShape().setRadius(0.4f);
+                    }
                 }
             }
         }
@@ -287,8 +311,8 @@ public class BasketBall extends ApplicationAdapter implements GestureDetector.Ge
         return false;
     }
 
-    private float normalize(float value, float min, float max) {
-        return (value - min) / (max - min);
+    private Vector2 normalize(Vector2 target, Vector2 start) {
+        return target.sub(start).nor();
     }
 
 
@@ -299,6 +323,9 @@ public class BasketBall extends ApplicationAdapter implements GestureDetector.Ge
 
     @Override
     public boolean panStop(float x, float y, int pointer, int button) {
+        Gdx.app.log("PAN Stop", "Stop");
+        point2.set(x, y, 0);
+        camera.unproject(point2);
         return false;
     }
 
