@@ -25,6 +25,7 @@ import com.badlogic.gdx.physics.box2d.FixtureDef;
 import com.badlogic.gdx.physics.box2d.Manifold;
 import com.badlogic.gdx.physics.box2d.PolygonShape;
 import com.badlogic.gdx.physics.box2d.World;
+import com.badlogic.gdx.utils.viewport.FitViewport;
 
 public class BasketBall extends ApplicationAdapter implements GestureDetector.GestureListener, ContactListener {
 
@@ -52,6 +53,15 @@ public class BasketBall extends ApplicationAdapter implements GestureDetector.Ge
     private Music croowedSound;
     private boolean updatedGround;
     private Fixture groundFixTop;
+    private FitViewport viewPort;
+
+    public static int V_WIDTH = 480;
+    public static int V_HEIGHT = 640;
+
+    private float BALL_RADIOS = 0.6f;
+    private float RIM_RADIOS = 0.02f;
+    private float GROUND_Y = 0.5f;
+    private float UPPER_GROUND_Y = 2.5f;
 
     private float convertToWorld(float px) {
         return px / 100;
@@ -65,8 +75,9 @@ public class BasketBall extends ApplicationAdapter implements GestureDetector.Ge
     public void create() {
         batch = new SpriteBatch();
         world = new World(new Vector2(0, -10f), true);
-        camera = new OrthographicCamera();
-        camera.setToOrtho(false, convertToWorld(Gdx.graphics.getWidth()), convertToWorld(Gdx.graphics.getHeight()));
+        camera = new OrthographicCamera(V_WIDTH / 100f, V_HEIGHT / 100f);
+        camera.position.set(camera.viewportWidth / 2f, camera.viewportHeight / 2f, 0);
+
         debugRender = new Box2DDebugRenderer();
 
         img = new Texture(Gdx.files.internal("single basket.png"));
@@ -97,9 +108,9 @@ public class BasketBall extends ApplicationAdapter implements GestureDetector.Ge
         FixtureDef fixtureDef = new FixtureDef();
 
         bodyDef.type = BodyDef.BodyType.StaticBody;
-        bodyDef.position.set(convertToWorld(Gdx.graphics.getWidth() - 320), convertToWorld(Gdx.graphics.getHeight() - 250));
+        bodyDef.position.set(camera.viewportWidth / 2.5f, camera.viewportHeight / 1.4f);
         leftBody = world.createBody(bodyDef);
-        circle.setRadius(convertToWorld(5 / 2));
+        circle.setRadius(RIM_RADIOS);
         fixtureDef.shape = circle;
         fixtureDef.density = 0.5f;
         fixtureDef.friction = 0.4f;
@@ -107,9 +118,8 @@ public class BasketBall extends ApplicationAdapter implements GestureDetector.Ge
         fixtureDef.isSensor = true;
         leftBody.createFixture(fixtureDef);
 
-        bodyDef.position.set(convertToWorld(Gdx.graphics.getWidth() - 320 + 100), convertToWorld(Gdx.graphics.getHeight() - 250));
+        bodyDef.position.set(leftBody.getPosition().x + 2 * 0.6f, leftBody.getPosition().y);
         rightBody = world.createBody(bodyDef);
-        circle.setRadius(convertToWorld(5 / 2));
         fixtureDef.shape = circle;
         fixtureDef.density = 0.5f;
         fixtureDef.friction = 0.4f;
@@ -126,16 +136,16 @@ public class BasketBall extends ApplicationAdapter implements GestureDetector.Ge
 // Create a body from the defintion and add it to the world
         Body groundBody = world.createBody(groundBodyDef);
 
-// Create a polygon shape
+        // Create a polygon shape
         PolygonShape groundBox = new PolygonShape();
-// Set the polygon shape as a box which is twice the size of our view port and 20 high
-// (setAsBox takes half-width and half-height as arguments)
-        groundBox.setAsBox(camera.viewportWidth, convertToWorld(49));
-// Create a fixture from our polygon shape and add it to our ground body
+        // Set the polygon shape as a box which is twice the size of our view port and 20 high
+        // (setAsBox takes half-width and half-height as arguments)
+        groundBox.setAsBox(camera.viewportWidth, GROUND_Y);
+        // Create a fixture from our polygon shape and add it to our ground body
         groundFix = groundBody.createFixture(groundBox, 0.0f);
 
         Body groundBodyTop = world.createBody(groundBodyDef);
-        groundBox.setAsBox(camera.viewportWidth, 3.8f);
+        groundBox.setAsBox(camera.viewportWidth, UPPER_GROUND_Y);
 
         FixtureDef fixtureDef1 = new FixtureDef();
         fixtureDef1.density = 0;
@@ -151,19 +161,19 @@ public class BasketBall extends ApplicationAdapter implements GestureDetector.Ge
     private void createBall() {
         // First we create a body definition
         BodyDef bodyDef = new BodyDef();
-// We set our body to dynamic, for something like ground which doesn't move we would set it to StaticBody
+        // We set our body to dynamic, for something like ground which doesn't move we would set it to StaticBody
         bodyDef.type = BodyDef.BodyType.DynamicBody;
-// Set our body's starting position in the world
-        bodyDef.position.set(convertToWorld(Gdx.graphics.getWidth() / 2f), convertToWorld(Gdx.graphics.getHeight() / 2f));
+        // Set our body's starting position in the world
+        bodyDef.position.set(camera.viewportWidth / 2f, camera.viewportHeight / 2f);
 
-// Create our body in the world using our body definition
+        // Create our body in the world using our body definition
         ballBody = world.createBody(bodyDef);
 
-// Create a circle shape and set its radius to 6
+        // Create a circle shape and set its radius to 6
         CircleShape circle = new CircleShape();
-        circle.setRadius(convertToWorld(60));
+        circle.setRadius(0.6f);
 
-// Create a fixture definition to apply our shape to
+        // Create a fixture definition to apply our shape to
         FixtureDef fixtureDef = new FixtureDef();
         fixtureDef.shape = circle;
         fixtureDef.density = 0.5f;
@@ -174,12 +184,16 @@ public class BasketBall extends ApplicationAdapter implements GestureDetector.Ge
 
     @Override
     public void render() {
+
+        camera.update();
+
         Gdx.gl.glClearColor(1, 0, 0, 1);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
 
+
         batch.begin();
-        batch.draw(backSprite, 0, 0, Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
-        batch.draw(basketEmpty, 40, 400, basketEmpty.getWidth(), basketEmpty.getHeight());
+//        batch.draw(backSprite, 0, 0, V_WIDTH, V_HEIGHT);
+//        batch.draw(basketEmpty, 10, 200, basketEmpty.getWidth(), basketEmpty.getHeight());
 
 
         if (ballBody.getPosition().y - convertToWorld(35) > leftBody.getPosition().y) {
@@ -193,10 +207,10 @@ public class BasketBall extends ApplicationAdapter implements GestureDetector.Ge
 
         float r = ballBody.getFixtureList().get(0).getShape().getRadius();
 
-//        ballSprite.setOrigin(ballSprite.getWidth() / 2, ballSprite.getHeight() / 2);
-        batch.draw(ballSprite, convertToBox(ballBody.getPosition().x - r),
-                convertToBox(ballBody.getPosition().y - r),
-                convertToBox(r) * 2, convertToBox(r) * 2);
+        //        ballSprite.setOrigin(ballSprite.getWidth() / 2, ballSprite.getHeight() / 2);
+//        batch.draw(ballSprite, convertToBox(ballBody.getPosition().x - r),
+//                convertToBox(ballBody.getPosition().y - r),
+//                convertToBox(r) * 2, convertToBox(r) * 2);
 
         if (topOfBasket) {
             if (ballBody.getLinearVelocity().y == 0) {
@@ -209,7 +223,7 @@ public class BasketBall extends ApplicationAdapter implements GestureDetector.Ge
                 groundScale = false;
                 updatedGround = false;
             } else {
-                batch.draw(goalPostSprite, 0, 0, Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
+//                batch.draw(goalPostSprite, 0, 0, V_WIDTH, V_HEIGHT);
                 groundFixTop.setSensor(false);
             }
         }
@@ -257,10 +271,13 @@ public class BasketBall extends ApplicationAdapter implements GestureDetector.Ge
 
             } else {
                 if (ballBody.getLinearVelocity().y == 0) {
-                    shootSound.play();
-                    Gdx.app.log("Fling", "x: " + velocityX + " y:  " + velocityY);
-                    Vector2 initialVelocity = new Vector2(8.5f, 8.5f);
-                    initialVelocity.rotate(45);
+//                    shootSound.play();
+                    Vector3 vector3 = new Vector3(velocityX, velocityY, 0);
+                    camera.unproject(vector3);
+                    Gdx.app.log("Fling", "x: " + vector3.x + " y:  " + vector3.y);
+                    float angle = ballBody.getPosition().angleRad(new Vector2(vector3.x, vector3.y));
+                    Vector2 initialVelocity = new Vector2(6.4f, 6.4f);
+                    initialVelocity.rotate(45 + angle);
                     ballBody.setLinearVelocity(initialVelocity);
                     ballBody.getFixtureList().get(0).getShape().setRadius(convertToWorld(35));
                 }
@@ -306,13 +323,9 @@ public class BasketBall extends ApplicationAdapter implements GestureDetector.Ge
         Fixture B = contact.getFixtureB();
 
         if (A.getBody().getType() == BodyDef.BodyType.KinematicBody) {
-            if (!dropSound.isPlaying()) {
-                dropSound.play();
-            }
+//            dropSound.play();
         } else if (B.getBody().getType() == BodyDef.BodyType.KinematicBody) {
-            if (!dropSound.isPlaying()) {
-                dropSound.play();
-            }
+//            dropSound.play();
         }
 
     }

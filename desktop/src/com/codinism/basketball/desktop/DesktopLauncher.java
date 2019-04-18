@@ -7,8 +7,8 @@ import com.codinism.basketball.BasketBall;
 public class DesktopLauncher {
     public static void main(String[] arg) {
         LwjglApplicationConfiguration config = new LwjglApplicationConfiguration();
-        config.height = 640;
-        config.width = 360;
+        config.height = BasketBall.V_HEIGHT;
+        config.width = BasketBall.V_WIDTH;
         new LwjglApplication(new BasketBall(), config);
     }
 }
