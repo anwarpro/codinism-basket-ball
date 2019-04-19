@@ -53,8 +53,8 @@ public class BasketBall extends ApplicationAdapter implements GestureDetector.Ge
     private Fixture groundFixTop;
     private StretchViewport viewPort;
 
-    public static int V_WIDTH = 480;
-    public static int V_HEIGHT = 640;
+    public static int V_WIDTH = 540;
+    public static int V_HEIGHT = 960;
 
     private float BALL_RADIOS = 0.6f;
     private float RIM_RADIOS = 0.02f;
