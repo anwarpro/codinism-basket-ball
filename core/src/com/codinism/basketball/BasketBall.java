@@ -196,15 +196,6 @@ public class BasketBall extends ApplicationAdapter implements GestureDetector.Ge
 //        batch.draw(basketEmpty, 10, 200, basketEmpty.getWidth(), basketEmpty.getHeight());
 
 
-        if (ballBody.getPosition().y - 0.36f > leftBody.getPosition().y) {
-            leftBody.getFixtureList().get(0).setSensor(false);
-            rightBody.getFixtureList().get(0).setSensor(false);
-            topOfBasket = true;
-        } else {
-            leftBody.getFixtureList().get(0).setSensor(true);
-            rightBody.getFixtureList().get(0).setSensor(true);
-        }
-
         float r = ballBody.getFixtureList().get(0).getShape().getRadius();
 
         //        ballSprite.setOrigin(ballSprite.getWidth() / 2, ballSprite.getHeight() / 2);

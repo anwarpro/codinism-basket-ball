@@ -5,9 +5,11 @@ import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.assets.loaders.resolvers.InternalFileHandleResolver;
 import com.badlogic.gdx.assets.loaders.resolvers.ResolutionFileResolver;
 import com.badlogic.gdx.assets.loaders.resolvers.ResolutionFileResolver.Resolution;
+import com.badlogic.gdx.audio.Sound;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.Texture;
+import com.badlogic.gdx.graphics.g2d.Sprite;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.input.GestureDetector;
 import com.badlogic.gdx.math.Vector2;
@@ -26,6 +28,8 @@ import com.badlogic.gdx.physics.box2d.PolygonShape;
 import com.badlogic.gdx.physics.box2d.World;
 
 import java.util.LinkedList;
+
+import javax.swing.SizeSequence;
 
 public class TestScale extends ApplicationAdapter implements GestureDetector.GestureListener, ContactListener {
     private static final float BALL_RADIOS = 0.6f;
@@ -58,6 +62,16 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
     private Vector3 point;
     private boolean wasTouched;
     private Vector3 point2;
+    private boolean shoot;
+    private boolean win;
+    private boolean lose;
+
+    private Sound dropSound1;
+    private Sound shootSound;
+    private Sound croowedSound;
+    private Sprite spriteBall;
+    private Sprite spriteFloor;
+    private Sprite spriteWall;
 
     private void createBall() {
         BodyDef bodyDef = new BodyDef();
@@ -77,6 +91,8 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
         fixtureDef.friction = 0.5f;
         fixtureDef.restitution = 0.6f; // Make it bounce a little bit
         ballBody.createFixture(fixtureDef);
+
+        shoot = false;
     }
 
     private void createFloor() {
@@ -97,7 +113,7 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
         fixtureDef.isSensor = true;
         leftBody.createFixture(fixtureDef);
 
-        bodyDef.position.set(leftBody.getPosition().x + 2 * BALL_RADIOS, leftBody.getPosition().y);
+        bodyDef.position.set(leftBody.getPosition().x + 2 * 0.55f, leftBody.getPosition().y);
         rightBody = world.createBody(bodyDef);
         rightBody.createFixture(fixtureDef);
 
@@ -120,6 +136,31 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
         fixtureDef1.isSensor = true;
         fixtureDef1.shape = groundBox;
         groundFixTop = groundBodyTop.createFixture(fixtureDef1);
+
+
+        // Create our body definition
+        BodyDef basketSensorBodyDef = new BodyDef();
+        basketSensorBodyDef.type = BodyDef.BodyType.StaticBody;
+        basketSensorBodyDef.position.set(new Vector2(0, 6f));
+
+        Body sensor = world.createBody(basketSensorBodyDef);
+        sensor.setUserData("basketline");
+        PolygonShape groundBoxS = new PolygonShape();
+        groundBoxS.setAsBox(cam.viewportWidth, 0.01f);
+
+        FixtureDef fixtureDef2 = new FixtureDef();
+        fixtureDef2.density = 0;
+        fixtureDef2.isSensor = true;
+        fixtureDef2.shape = groundBoxS;
+        sensor.createFixture(fixtureDef2);
+    }
+
+    private void loadAsset() {
+        texture = new Texture(fileResolver.resolve("ball.png")); // +++
+        spriteBall = new Sprite(texture);
+
+        spriteFloor = new Sprite(new Texture(fileResolver.resolve("new/flor.png")));
+        spriteWall = new Sprite(new Texture(fileResolver.resolve("new/wall.png")));
     }
 
     public void create() {
@@ -127,7 +168,9 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
         fileResolver = new ResolutionFileResolver(new InternalFileHandleResolver(), new Resolution(800, 480, "480"), // +++
                 new Resolution(1280, 720, "720"), new Resolution(1920, 1080, "1080")); // +++
         batch = new SpriteBatch();
-        texture = new Texture(fileResolver.resolve("badlogic.jpg")); // +++
+
+        loadAsset();
+
         cam = new OrthographicCamera();
         cam.setToOrtho(false, VIRTUAL_HEIGHT * Gdx.graphics.getWidth() / (float) Gdx.graphics.getHeight(), VIRTUAL_HEIGHT); // +++
 
@@ -137,59 +180,55 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
         createBall();
         createFloor();
 
+        soundLoad();
+
         Gdx.input.setInputProcessor(new GestureDetector(this));
         world.setContactListener(this);
+    }
+
+    private void soundLoad() {
+        dropSound1 = Gdx.audio.newSound(Gdx.files.internal("audio/drop.ogg"));
+        shootSound = Gdx.audio.newSound(Gdx.files.internal("audio/shoot.ogg"));
+        croowedSound = Gdx.audio.newSound(Gdx.files.internal("audio/croowed.mp3"));
     }
 
     public void resize(int width, int height) {
         cam.setToOrtho(false, VIRTUAL_HEIGHT * width / (float) height, VIRTUAL_HEIGHT); // +++
         batch.setProjectionMatrix(cam.combined);
+        cam.update();
     }
 
     public void render() {
         cam.update();
 
-        float delta = Math.min(1 / 10f, Gdx.graphics.getDeltaTime());
-
-        if (topOfBasket) {
-            if (ballBody.getLinearVelocity().y == 0) {
-                topOfBasket = false;
-
-                ballBody.getWorld().destroyBody(ballBody);
-
-                groundFixTop.setSensor(true);
-
-                leftBody.getFixtureList().get(0).setSensor(true);
-                rightBody.getFixtureList().get(0).setSensor(true);
-
-                createBall();
-
-                updatedGround = false;
-            } else {
-//                batch.draw(goalPostSprite, 0, 0, V_WIDTH, V_HEIGHT);
-                groundFixTop.setSensor(false);
+        if (shoot && win && ballBody.getPosition().y < leftBody.getPosition().y) {
+            if (win) {
+                croowedSound.play();
+                win = false;
             }
         }
 
-        if (ballBody.getPosition().x < 0 || ballBody.getPosition().x > cam.viewportWidth) {
-            topOfBasket = false;
-
-            ballBody.getWorld().destroyBody(ballBody);
-
-            groundFixTop.setSensor(true);
-
-            leftBody.getFixtureList().get(0).setSensor(true);
-            rightBody.getFixtureList().get(0).setSensor(true);
-
-            createBall();
-
-            updatedGround = false;
+        if (shoot && ballBody.getLinearVelocity().y == 0) {
+            resetGame();
         }
 
+        if (ballBody.getPosition().x + BALL_RADIOS < 0 || ballBody.getPosition().x - BALL_RADIOS > cam.viewportWidth) {
+            resetGame();
+        }
 
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
+
+        float r = ballBody.getFixtureList().get(0).getShape().getRadius();
         batch.begin();
-//        batch.draw(texture, 0, y, 1.8f, 1.8f); // +++
+
+        batch.draw(spriteFloor, 0, 0, cam.viewportWidth, UPPER_GROUND_Y + 0.5f);
+        batch.draw(spriteWall, 0, UPPER_GROUND_Y + 0.5f, cam.viewportWidth, 8 - (UPPER_GROUND_Y + 0.5f));
+
+        spriteBall.setSize(2 * r, 2 * r);
+        spriteBall.setOriginCenter();
+        batch.draw(spriteBall, ballBody.getPosition().x - r, ballBody.getPosition().y - r,
+                r * 2, 2 * r);
+
         batch.end();
 
     /*    If a Sprite is used instead of a Texture the correct size has to be applied to the sprite.
@@ -199,7 +238,23 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
         //        sprite.setOriginCenter();
 
         debugRender.render(world, cam.combined);
-        world.step(1 / 60f, 6, 2);
+        world.step(1 / 60f, 10, 6);
+    }
+
+    private void resetGame() {
+        topOfBasket = false;
+        win = false;
+        lose = false;
+        updatedGround = false;
+
+        groundFixTop.setSensor(true);
+        ballBody.getWorld().destroyBody(ballBody);
+
+        leftBody.getFixtureList().get(0).setSensor(true);
+        rightBody.getFixtureList().get(0).setSensor(true);
+
+        createBall();
+
     }
 
     public void dispose() {
@@ -229,6 +284,9 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
 
     @Override
     public boolean fling(float velocityX, float velocityY, int button) {
+
+        float angle = -(float) Math.toDegrees(Math.atan2(velocityY, velocityX));
+
         if (Math.abs(velocityX) > Math.abs(velocityY)) {
             if (velocityX > 0) {
 
@@ -242,10 +300,19 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
                 if (wasTouched) {
                     if (ballBody.getLinearVelocity().y == 0) {
 
-//                    shootSound.play();
-                        Vector2 initialVelocity = new Vector2(8, 8);
-                        initialVelocity.rotate(45 + 1);
-                        Gdx.app.log("Velocity", "" + initialVelocity.x + ", " + initialVelocity.y);
+                        shoot = true;
+
+                        float speed = new Vector2(ballBody.getPosition().x, ballBody.getPosition().y)
+                                .dst(new Vector2(point2.x, point2.y));
+
+                        Gdx.app.log("Angle", "" + angle);
+
+                        shootSound.play();
+
+                        Vector2 initialVelocity = new Vector2(Math.min(8f, Math.max(7.5f, speed * 2)),
+                                Math.min(8f, Math.max(7.5f, speed * 2)));
+                        initialVelocity.rotate(angle - 45);
+
 //                        ballBody.setLinearDamping(1 - 0.98f);
                         ballBody.setLinearVelocity(initialVelocity.x, initialVelocity.y);
                         ballBody.getFixtureList().get(0).getShape().setRadius(0.4f);
@@ -286,7 +353,34 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
 
     @Override
     public void beginContact(Contact contact) {
+        Fixture A = contact.getFixtureA();
+        Fixture B = contact.getFixtureB();
 
+        if (A.getBody().getUserData() == "basketline") {
+            if (topOfBasket) {
+                if (B.getBody().getPosition().x > leftBody.getPosition().x
+                        && B.getBody().getPosition().x < rightBody.getPosition().x) {
+                    win = true;
+                } else {
+                    lose = true;
+                }
+            }
+            Gdx.app.log("win", "" + win + ", " + lose);
+
+        } else if (B.getBody().getUserData() == "basketline") {
+            if (topOfBasket) {
+                if (A.getBody().getPosition().x > leftBody.getPosition().x
+                        && A.getBody().getPosition().x < rightBody.getPosition().x) {
+                    win = true;
+                } else {
+                    lose = true;
+                }
+            }
+            Gdx.app.log("win", "" + win + ", " + lose);
+
+        } else if (!A.isSensor() || !B.isSensor()) {
+            dropSound1.play();
+        }
     }
 
     @Override
@@ -294,14 +388,22 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
         Fixture A = contact.getFixtureA();
         Fixture B = contact.getFixtureB();
 
-        if (A.getBody().getType() == BodyDef.BodyType.StaticBody) {
-            leftBody.getFixtureList().get(0).setSensor(false);
-            rightBody.getFixtureList().get(0).setSensor(false);
-            topOfBasket = true;
-        } else if (B.getBody().getType() == BodyDef.BodyType.StaticBody) {
-            leftBody.getFixtureList().get(0).setSensor(false);
-            rightBody.getFixtureList().get(0).setSensor(false);
-            topOfBasket = true;
+        if (A.getBody().getUserData() == "basketline") {
+            if (!topOfBasket) {
+                leftBody.getFixtureList().get(0).setSensor(false);
+                rightBody.getFixtureList().get(0).setSensor(false);
+                topOfBasket = true;
+            } else {
+                groundFixTop.setSensor(false);
+            }
+        } else if (B.getBody().getUserData() == "basketline") {
+            if (!topOfBasket) {
+                leftBody.getFixtureList().get(0).setSensor(false);
+                rightBody.getFixtureList().get(0).setSensor(false);
+                topOfBasket = true;
+            } else {
+                groundFixTop.setSensor(false);
+            }
         }
 
     }
