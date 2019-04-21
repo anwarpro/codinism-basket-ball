@@ -2,364 +2,559 @@ package com.codinism.basketball;
 
 import com.badlogic.gdx.ApplicationAdapter;
 import com.badlogic.gdx.Gdx;
-import com.badlogic.gdx.audio.Music;
+import com.badlogic.gdx.Input;
+import com.badlogic.gdx.InputProcessor;
 import com.badlogic.gdx.graphics.GL20;
-import com.badlogic.gdx.graphics.OrthographicCamera;
-import com.badlogic.gdx.graphics.Texture;
-import com.badlogic.gdx.graphics.g2d.Sprite;
+import com.badlogic.gdx.graphics.g2d.BitmapFont;
+import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
-import com.badlogic.gdx.input.GestureDetector;
+import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.math.Vector3;
 import com.badlogic.gdx.physics.box2d.Body;
 import com.badlogic.gdx.physics.box2d.BodyDef;
 import com.badlogic.gdx.physics.box2d.Box2DDebugRenderer;
 import com.badlogic.gdx.physics.box2d.CircleShape;
-import com.badlogic.gdx.physics.box2d.Contact;
-import com.badlogic.gdx.physics.box2d.ContactImpulse;
-import com.badlogic.gdx.physics.box2d.ContactListener;
 import com.badlogic.gdx.physics.box2d.Fixture;
 import com.badlogic.gdx.physics.box2d.FixtureDef;
-import com.badlogic.gdx.physics.box2d.Manifold;
+import com.badlogic.gdx.physics.box2d.Joint;
 import com.badlogic.gdx.physics.box2d.PolygonShape;
+import com.badlogic.gdx.physics.box2d.QueryCallback;
 import com.badlogic.gdx.physics.box2d.World;
-import com.badlogic.gdx.utils.viewport.StretchViewport;
+import com.badlogic.gdx.physics.box2d.joints.DistanceJointDef;
+import com.badlogic.gdx.physics.box2d.joints.FrictionJointDef;
+import com.badlogic.gdx.physics.box2d.joints.GearJointDef;
+import com.badlogic.gdx.physics.box2d.joints.MouseJoint;
+import com.badlogic.gdx.physics.box2d.joints.MouseJointDef;
+import com.badlogic.gdx.physics.box2d.joints.PrismaticJointDef;
+import com.badlogic.gdx.physics.box2d.joints.PulleyJointDef;
+import com.badlogic.gdx.physics.box2d.joints.RevoluteJointDef;
+import com.badlogic.gdx.physics.box2d.joints.RopeJointDef;
+import com.badlogic.gdx.physics.box2d.joints.WeldJointDef;
+import com.badlogic.gdx.physics.box2d.joints.WheelJointDef;
+import com.badlogic.gdx.utils.viewport.FitViewport;
+import com.badlogic.gdx.utils.viewport.Viewport;
 
-public class BasketBall extends ApplicationAdapter implements GestureDetector.GestureListener, ContactListener {
+import java.util.ArrayList;
 
+public class BasketBall extends ApplicationAdapter implements InputProcessor {
+    private static final String TAG = "Box2DJointsSample";
+
+    private static final float SCENE_WIDTH = 12.80f; // 12.8 metres wide
+    private static final float SCENE_HEIGHT = 7.20f; // 7.2 metres high
+
+    private Viewport viewport;
+    private Vector3 point = new Vector3();
     private SpriteBatch batch;
-    private Texture img;
 
-    private World world;
-    private OrthographicCamera camera;
-    private Sprite backSprite;
-    private Sprite ballSprite;
-    private Sprite basketEmpty;
-    private Sprite goalPostSprite;
-    private Box2DDebugRenderer debugRender;
-    private Body ballBody;
-    private Body ground;
-    private Body leftBody;
-    private Body rightBody;
-    private boolean isDown;
-    private Vector3 startVector;
-    private Fixture groundFix;
-    private boolean groundScale;
-    private boolean topOfBasket;
-    private Music shootSound;
-    private Music dropSound;
-    private Music croowedSound;
-    private boolean updatedGround;
-    private Fixture groundFixTop;
-    private StretchViewport viewPort;
+    //General Box2D
+    Box2DDebugRenderer debugRenderer;
+    World world;
 
-    public static int V_WIDTH = 540;
-    public static int V_HEIGHT = 960;
+    // It will allow us to interact with the physics bodies
+    MouseJoint mouseJoint;
+    Body hitBody = null;
 
-    private float BALL_RADIOS = 0.6f;
-    private float RIM_RADIOS = 0.02f;
-    private float GROUND_Y = 0.5f;
-    private float UPPER_GROUND_Y = 2.5f;
-    private Vector3 point;
-    private Body bodyThatWasHit;
-    private boolean wasTouched;
-    private Vector3 point2;
+    // Title
+    String title = null;
+    BitmapFont font;
+    GlyphLayout layout = new GlyphLayout();
+    float titleWidth;
 
-    private float convertToWorld(float px) {
-        return px / 100;
-    }
+    // Active bodies and joints
+    ArrayList<Body> bodies = new ArrayList<Body>();
+    ArrayList<Joint> joints = new ArrayList<Joint>();
 
-    private float convertToBox(float meter) {
-        return meter * 100;
-    }
+    int currentJoint = 0;
+    private static final int NUM_OF_EXAMPLES = 9;
+
+    Body groundBody;
 
     @Override
     public void create() {
+        super.create();
+
+        viewport = new FitViewport(SCENE_WIDTH, SCENE_HEIGHT);
+        // Center camera to get (0,0) as the origin of the Box2D world
+        viewport.getCamera().position.set(viewport.getCamera().position.x + SCENE_WIDTH * 0.5f,
+                viewport.getCamera().position.y + SCENE_HEIGHT * 0.5f
+                , 0);
+        viewport.getCamera().update();
+
         batch = new SpriteBatch();
-        world = new World(new Vector2(0, -10f), true);
-        camera = new OrthographicCamera(4.8f, 6.4f);
-        camera.setToOrtho(false);
 
-        debugRender = new Box2DDebugRenderer();
-        point = new Vector3();
-        point2 = new Vector3();
+        Gdx.input.setInputProcessor(this);
 
-        img = new Texture(Gdx.files.internal("single basket.png"));
-        backSprite = new Sprite(img, 720, 1280);
-        ballSprite = new Sprite(new Texture(Gdx.files.internal("ball.png")), 141, 158);
-        basketEmpty = new Sprite(new Texture(Gdx.files.internal("0.png")), 82, 177);
+        font = new BitmapFont(Gdx.files.internal("verdana39.fnt"), false);
 
-        goalPostSprite = new Sprite(new Texture(Gdx.files.internal("goalpost.png")), 720, 1280);
+        // Create Physics World
+        world = new World(new Vector2(0, -10), true);
 
+        // Instantiate DebugRenderer for rendering shapes
+        debugRenderer = new Box2DDebugRenderer();
 
-        //sound
-        shootSound = Gdx.audio.newMusic(Gdx.files.internal("audio/shoot.mp3"));
-        shootSound.setLooping(false);
-        dropSound = Gdx.audio.newMusic(Gdx.files.internal("audio/drop.mp3"));
-        dropSound.setLooping(false);
-        croowedSound = Gdx.audio.newMusic(Gdx.files.internal("audio/croowed.mp3"));
-        croowedSound.setLooping(false);
+        // Creates a ground to avoid objects falling forever
+        createGround();
 
-        createBall();
+        Gdx.app.log(TAG, "Use the mouse to interact.\n"
+                + "\tLeft button - Change Joint example\n"
+                + "\tRight button - Interact with bodies\n");
 
-
-        // First we create a body definition
-        BodyDef bodyDef = new BodyDef();
-
-// Create a circle shape and set its radius to 6
-        CircleShape circle = new CircleShape();
-// Create a fixture definition to apply our shape to
-        FixtureDef fixtureDef = new FixtureDef();
-
-        bodyDef.type = BodyDef.BodyType.StaticBody;
-        bodyDef.position.set(camera.viewportWidth / 2.7f, camera.viewportHeight / 1.4f);
-        leftBody = world.createBody(bodyDef);
-        circle.setRadius(RIM_RADIOS);
-        fixtureDef.shape = circle;
-        fixtureDef.density = 1f;
-        fixtureDef.friction = 1f;
-        fixtureDef.restitution = 0.2f; // Make it bounce a little bit
-        fixtureDef.isSensor = true;
-        leftBody.createFixture(fixtureDef);
-
-        bodyDef.position.set(leftBody.getPosition().x + 2 * 0.6f, leftBody.getPosition().y);
-        rightBody = world.createBody(bodyDef);
-        rightBody.createFixture(fixtureDef);
-
-
-        // Create our body definition
-        BodyDef groundBodyDef = new BodyDef();
-        groundBodyDef.type = BodyDef.BodyType.KinematicBody;
-// Set its world position
-        groundBodyDef.position.set(new Vector2(0, 0));
-
-// Create a body from the defintion and add it to the world
-        Body groundBody = world.createBody(groundBodyDef);
-
-        // Create a polygon shape
-        PolygonShape groundBox = new PolygonShape();
-        // Set the polygon shape as a box which is twice the size of our view port and 20 high
-        // (setAsBox takes half-width and half-height as arguments)
-        groundBox.setAsBox(camera.viewportWidth, GROUND_Y);
-        // Create a fixture from our polygon shape and add it to our ground body
-        groundFix = groundBody.createFixture(groundBox, 0.0f);
-
-        Body groundBodyTop = world.createBody(groundBodyDef);
-        groundBox.setAsBox(camera.viewportWidth, UPPER_GROUND_Y);
-
-        FixtureDef fixtureDef1 = new FixtureDef();
-        fixtureDef1.density = 0;
-        fixtureDef1.isSensor = true;
-        fixtureDef1.shape = groundBox;
-
-        groundFixTop = groundBodyTop.createFixture(fixtureDef1);
-
-        Gdx.input.setInputProcessor(new GestureDetector(this));
-        world.setContactListener(this);
-    }
-
-    private void createBall() {
-        // First we create a body definition
-        BodyDef bodyDef = new BodyDef();
-        // We set our body to dynamic, for something like ground which doesn't move we would set it to StaticBody
-        bodyDef.type = BodyDef.BodyType.DynamicBody;
-        // Set our body's starting position in the world
-        bodyDef.position.set(camera.viewportWidth / 2f, camera.viewportHeight / 2f);
-
-        // Create our body in the world using our body definition
-        ballBody = world.createBody(bodyDef);
-
-        // Create a circle shape and set its radius to 6
-        CircleShape circle = new CircleShape();
-        circle.setRadius(0.6f);
-
-        // Create a fixture definition to apply our shape to
-        FixtureDef fixtureDef = new FixtureDef();
-        fixtureDef.shape = circle;
-        fixtureDef.density = 0.5f;
-        fixtureDef.friction = 0.5f;
-        fixtureDef.restitution = 0.6f; // Make it bounce a little bit
-        ballBody.createFixture(fixtureDef);
     }
 
     @Override
-    public void render() {
+    public boolean keyDown(int keycode) {
+        return false;
+    }
 
-        camera.update();
+    @Override
+    public boolean keyUp(int keycode) {
+        return false;
+    }
 
-        Gdx.gl.glClearColor(1, 0, 0, 1);
-        Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
+    @Override
+    public boolean keyTyped(char character) {
+        return false;
+    }
 
+    @Override
+    public boolean touchDown(int x, int y, int pointer, int button) {
+        // Mouse coordinates to box2D coordinates
+        viewport.getCamera().unproject(point.set(x, y, 0));
 
-        batch.begin();
-//        batch.draw(backSprite, 0, 0, V_WIDTH, V_HEIGHT);
-//        batch.draw(basketEmpty, 10, 200, basketEmpty.getWidth(), basketEmpty.getHeight());
+        if (button == Input.Buttons.LEFT) {
 
+            // Clean previous example
+            for (Joint j : joints) {
+                world.destroyJoint(j);
+            }
+            joints.clear();
 
-        float r = ballBody.getFixtureList().get(0).getShape().getRadius();
+            for (Body b : bodies) {
+                for (Fixture f : b.getFixtureList()) {
+                    b.destroyFixture(f);
+                }
+            }
+            bodies.clear();
 
-        //        ballSprite.setOrigin(ballSprite.getWidth() / 2, ballSprite.getHeight() / 2);
-//        batch.draw(ballSprite, convertToBox(ballBody.getPosition().x - r),
-//                convertToBox(ballBody.getPosition().y - r),
-//                convertToBox(r) * 2, convertToBox(r) * 2);
+            switch (currentJoint) {
+                case 0:
+                    showRevoluteJoint();
+                    break;
+                case 1:
+                    showDistanceJoint();
+                    break;
+                case 2:
+                    showPrismaticJoint();
+                    break;
+                case 3:
+                    showRopeJoint();
+                    break;
+                case 4:
+                    showFrictionJoint();
+                    break;
+                case 5:
+                    showPulleyJoint();
+                    break;
+                case 6:
+                    showGearJoint();
+                    break;
+                case 7:
+                    showWeldJoint();
+                    break;
+                case 8:
+                    showWheelJoint();
+                    break;
+            }
 
-        if (topOfBasket) {
-            if (ballBody.getLinearVelocity().y == 0) {
-                topOfBasket = false;
+            currentJoint = ++currentJoint % NUM_OF_EXAMPLES;
 
-                ballBody.getWorld().destroyBody(ballBody);
+            return true;
+        } else if (button == Input.Buttons.RIGHT) {
+            hitBody = null;
 
-                groundFixTop.setSensor(true);
+            // Check if a interactive body has been right-clicked
+            world.QueryAABB(callback, point.x - 0.0001f, point.y - 0.0001f, point.x + 0.0001f, point.y + 0.0001f);
 
-                createBall();
+            if (hitBody == groundBody) hitBody = null;
 
-                groundScale = false;
-                updatedGround = false;
-            } else {
-//                batch.draw(goalPostSprite, 0, 0, V_WIDTH, V_HEIGHT);
-                groundFixTop.setSensor(false);
+            // if we hit a interactive body we create a new mouse joint
+            // and attach it to the hit body.
+            if (hitBody != null) {
+                MouseJointDef def = new MouseJointDef();
+                def.bodyA = groundBody;
+                def.bodyB = hitBody;
+                def.collideConnected = true;
+                def.target.set(point.x, point.y);
+                def.maxForce = 1000.0f * hitBody.getMass();
+
+                mouseJoint = (MouseJoint) world.createJoint(def);
+                hitBody.setAwake(true);
             }
         }
+        return false;
+    }
 
-        if (ballBody.getPosition().x < 0 || ballBody.getPosition().x > 4.8) {
-            topOfBasket = false;
+    /**
+     * another temporary vector
+     **/
+    Vector2 target = new Vector2();
 
-            ballBody.getWorld().destroyBody(ballBody);
-
-            groundFixTop.setSensor(true);
-
-            createBall();
-
-            groundScale = false;
-            updatedGround = false;
+    @Override
+    public boolean touchDragged(int x, int y, int pointer) {
+        // To keep the object responsive after clicking the first time
+        // It will just update the target coordinates
+        if (mouseJoint != null) {
+            viewport.getCamera().unproject(point.set(x, y, 0));
+            mouseJoint.setTarget(target.set(point.x, point.y));
         }
+        return false;
+    }
 
-        batch.end();
+    @Override
+    public boolean mouseMoved(int screenX, int screenY) {
+        return false;
+    }
 
-        debugRender.render(world, camera.combined);
+    @Override
+    public boolean scrolled(int amount) {
+        return false;
+    }
 
-        world.step(1 / 60f, 6, 2);
+    @Override
+    public boolean touchUp(int x, int y, int pointer, int button) {
+        // if a mouse joint exists we simply destroy it
+        if (button == Input.Buttons.RIGHT) {
+            if (mouseJoint != null) {
+                world.destroyJoint(mouseJoint);
+                mouseJoint = null;
+            }
+        }
+        return false;
+    }
+
+    QueryCallback callback = new QueryCallback() {
+        @Override
+        public boolean reportFixture(Fixture fixture) {
+            // if the hit point is inside the fixture of the body
+            // we report it
+            if (fixture.testPoint(point.x, point.y)) {
+                hitBody = fixture.getBody();
+                return false;
+            } else
+                return true;
+        }
+    };
+
+    private void showRevoluteJoint() {
+        setTitle("Revolute Joint");
+
+        Body smallBall = createSphere(BodyDef.BodyType.StaticBody, 0f, 3.75f, 1f, 1f, 0f, .25f);
+        Body bigBall = createSphere(BodyDef.BodyType.DynamicBody, 0f, 3.75f, 1f, 1f, 0f, .5f);
+
+        // Define the revolute joint
+        RevoluteJointDef revoluteJointDef = new RevoluteJointDef();
+        revoluteJointDef.bodyA = smallBall;
+        revoluteJointDef.bodyB = bigBall;
+        revoluteJointDef.collideConnected = false;
+        revoluteJointDef.localAnchorA.set(0, 0);
+        revoluteJointDef.localAnchorB.set(-2.0f, 0);
+        revoluteJointDef.enableMotor = true;
+        revoluteJointDef.maxMotorTorque = 360;
+        revoluteJointDef.motorSpeed = 100f * MathUtils.degreesToRadians;
+
+        bodies.add(bigBall);
+        bodies.add(smallBall);
+        joints.add(world.createJoint(revoluteJointDef));
+    }
+
+    private void showDistanceJoint() {
+        setTitle("Distance Joint");
+
+        Body smallBall = createSphere(BodyDef.BodyType.DynamicBody, 0f, 3.75f, .8f, .8f, .4f, .25f);
+        Body bigBall = createSphere(BodyDef.BodyType.DynamicBody, 3.0f, 4.5f, .8f, 1f, .4f, .5f);
+
+        // Define the distance joint
+        DistanceJointDef distanceJointDef = new DistanceJointDef();
+        distanceJointDef.bodyA = smallBall;
+        distanceJointDef.bodyB = bigBall;
+        distanceJointDef.collideConnected = false;
+        distanceJointDef.length = 2.0f;
+        distanceJointDef.localAnchorA.set(0, 0);
+        distanceJointDef.localAnchorB.set(0, 0);
+
+        bodies.add(bigBall);
+        bodies.add(smallBall);
+        joints.add(world.createJoint(distanceJointDef));
+    }
+
+    private void showRopeJoint() {
+        setTitle("Rope Joint");
+
+        Body smallBall = createSphere(BodyDef.BodyType.DynamicBody, 0f, 3.75f, .8f, .8f, .4f, .25f);
+        Body bigBall = createSphere(BodyDef.BodyType.DynamicBody, 3.0f, 4.5f, .8f, 1f, .4f, .5f);
+
+        // Define the rope joint
+        RopeJointDef ropeJointDef = new RopeJointDef();
+        ropeJointDef.bodyA = smallBall;
+        ropeJointDef.bodyB = bigBall;
+        ropeJointDef.collideConnected = true;
+        ropeJointDef.maxLength = 4.0f;
+        ropeJointDef.localAnchorA.set(0, 0);
+        ropeJointDef.localAnchorB.set(0.0f, 0);
+
+        bodies.add(bigBall);
+        bodies.add(smallBall);
+        joints.add(world.createJoint(ropeJointDef));
+    }
+
+    private void showPrismaticJoint() {
+
+        setTitle("Prismatic Joint");
+
+        Body square = createPolygon(BodyDef.BodyType.DynamicBody, 0, 3.6f, .8f, .8f, .4f, .5f, .5f);
+
+        // Define the prismatic joint
+        PrismaticJointDef prismaticJointDef = new PrismaticJointDef();
+        prismaticJointDef.initialize(groundBody, square, new Vector2(SCENE_WIDTH * .5f, SCENE_HEIGHT * .5f), new Vector2(SCENE_WIDTH * .5f + 1f, 0));
+        prismaticJointDef.lowerTranslation = -2;
+        prismaticJointDef.upperTranslation = 2;
+        prismaticJointDef.enableLimit = true;
+        prismaticJointDef.enableMotor = true;
+        prismaticJointDef.maxMotorForce = 100;
+        prismaticJointDef.motorSpeed = 20f * MathUtils.degreesToRadians;
+
+        bodies.add(square);
+        joints.add(world.createJoint(prismaticJointDef));
+
+    }
+
+    private void showFrictionJoint() {
+        setTitle("Friction Joint");
+
+        Body square = createPolygon(BodyDef.BodyType.DynamicBody, 0, 3.6f, 1f, 0.1f, .4f, .5f, .5f);
+
+        // Define the friction joint
+        FrictionJointDef frictionJointDef = new FrictionJointDef();
+        frictionJointDef.initialize(groundBody, square, new Vector2(SCENE_WIDTH * .5f, SCENE_HEIGHT * .5f));
+        frictionJointDef.collideConnected = true;
+        frictionJointDef.maxForce = 6.0f;
+        frictionJointDef.maxTorque = -.3f;
+
+        bodies.add(square);
+        joints.add(world.createJoint(frictionJointDef));
+
+    }
+
+    private void showPulleyJoint() {
+        setTitle("Pulley Joint");
+
+        Body smallBall = createSphere(BodyDef.BodyType.DynamicBody, -1f, 5f, .3333f, .4f, .4f, .25f);
+        Body bigBall = createSphere(BodyDef.BodyType.DynamicBody, 1f, 5f, .3f, .4f, .4f, .3f);
+
+        // Define the pulley joint
+        PulleyJointDef pulleyJointDef = new PulleyJointDef();
+        pulleyJointDef.bodyA = smallBall;
+        pulleyJointDef.bodyB = bigBall;
+        pulleyJointDef.collideConnected = true;
+        pulleyJointDef.groundAnchorA.set(SCENE_WIDTH * .5f - 1, SCENE_HEIGHT * .5f);
+        pulleyJointDef.groundAnchorB.set(SCENE_WIDTH * .5f + 1f, SCENE_HEIGHT * .5f);
+        pulleyJointDef.localAnchorA.set(0, 0);
+        pulleyJointDef.localAnchorB.set(0, 0);
+        pulleyJointDef.lengthA = 0.7f;
+        pulleyJointDef.lengthB = 0.7f;
+        pulleyJointDef.ratio = 1f;
+
+        bodies.add(bigBall);
+        bodies.add(smallBall);
+        joints.add(world.createJoint(pulleyJointDef));
+    }
+
+    private void showGearJoint() {
+        setTitle("Gear Joint");
+
+        Body ball = createSphere(BodyDef.BodyType.DynamicBody, -1.5f, 5f, .3f, .4f, .4f, .25f);
+        Body square = createPolygon(BodyDef.BodyType.DynamicBody, 3f, 5f, 1f, 0.1f, .4f, .25f, .75f);
+
+        // Active bodies
+        bodies.add(ball);
+        bodies.add(square);
+
+        // RevoluteJoint for ball
+        RevoluteJointDef revoluteJointDef = new RevoluteJointDef();
+        revoluteJointDef.bodyA = groundBody;
+        revoluteJointDef.bodyB = ball;
+        revoluteJointDef.collideConnected = false;
+        revoluteJointDef.localAnchorA.set(0, 5f);
+        revoluteJointDef.localAnchorB.set(1.0f, 0);
+
+        Joint rj = world.createJoint(revoluteJointDef);
+
+
+        // PrismaticJoint for square
+        PrismaticJointDef prismaticJointDef = new PrismaticJointDef();
+        prismaticJointDef.initialize(groundBody, square, new Vector2(SCENE_WIDTH * .5f, 5f), new Vector2(0f, 1f));
+        prismaticJointDef.lowerTranslation = -2f;
+        prismaticJointDef.upperTranslation = .5f;
+        prismaticJointDef.enableLimit = true;
+
+        Joint pj = world.createJoint(prismaticJointDef);
+
+
+        // Define the gear joint
+        GearJointDef gearJointDef = new GearJointDef();
+        gearJointDef.bodyA = ball;
+        gearJointDef.bodyB = square;
+        gearJointDef.joint1 = rj;
+        gearJointDef.joint2 = pj;
+        gearJointDef.ratio = (float) (2.0f * Math.PI / 0.5f);
+
+        joints.add(world.createJoint(gearJointDef));
+        joints.add(pj);
+        joints.add(rj);
+    }
+
+    private void showWeldJoint() {
+        setTitle("Weld Joint");
+
+        Body smallBall = createSphere(BodyDef.BodyType.DynamicBody, -1f, 5f, .3333f, .4f, .4f, .25f);
+        Body bigBall = createSphere(BodyDef.BodyType.DynamicBody, 1f, 5f, .3f, .4f, .4f, .3f);
+
+        // Define the weld joint
+        WeldJointDef weldJointDef = new WeldJointDef();
+        weldJointDef.bodyA = smallBall;
+        weldJointDef.bodyB = bigBall;
+        weldJointDef.localAnchorA.set(0, 0);
+        weldJointDef.localAnchorB.set(.55f, 0);
+
+        bodies.add(bigBall);
+        bodies.add(smallBall);
+        joints.add(world.createJoint(weldJointDef));
+    }
+
+    private void showWheelJoint() {
+        setTitle("Wheel Joint");
+
+        Body wheel = createSphere(BodyDef.BodyType.DynamicBody, 0, 3f, .4f, .5f, .3f, .5f);
+
+        // Define the wheel joint
+        WheelJointDef wheelJointDef = new WheelJointDef();
+        wheelJointDef.bodyA = groundBody;
+        wheelJointDef.bodyB = wheel;
+        wheelJointDef.collideConnected = true;
+        wheelJointDef.localAnchorA.set(0, 0);
+        wheelJointDef.localAnchorB.set(0, 0);
+        wheelJointDef.motorSpeed = 5f;
+        wheelJointDef.enableMotor = true;
+        wheelJointDef.maxMotorTorque = 50f;
+        wheelJointDef.dampingRatio = 0.5f;
+        wheelJointDef.frequencyHz = 0.2f;
+
+
+        bodies.add(wheel);
+        joints.add(world.createJoint(wheelJointDef));
+    }
+
+    private void createGround() {
+
+        float halfGroundWidth = SCENE_WIDTH;
+        float halfGroundHeight = 0.5f; // 1 meter high
+
+        // Create a static body definition
+        BodyDef groundBodyDef = new BodyDef();
+        groundBodyDef.type = BodyDef.BodyType.StaticBody;
+
+        // Set the ground position to (0,0) -> libgdx coordinates system
+        groundBodyDef.position.set(halfGroundWidth * 0.5f, halfGroundHeight);
+
+        // Create a body from the defintion and add it to the world
+        groundBody = world.createBody(groundBodyDef);
+
+        // Create a rectangle shape which will fit the virtual_width and 1 meter high
+        // (setAsBox takes half-width and half-height as arguments)
+        PolygonShape groundBox = new PolygonShape();
+        groundBox.setAsBox(halfGroundWidth * 0.5f, halfGroundHeight);
+        // Create a fixture from our rectangle shape and add it to our ground body
+        groundBody.createFixture(groundBox, 0.0f);
+        // Free resources
+        groundBox.dispose();
+
+    }
+
+    private void setTitle(String newTitle) {
+        title = newTitle;
+
+        layout.setText(font, "title");
+        titleWidth = layout.width * 0.5f;
+    }
+
+    private Body createSphere(BodyDef.BodyType type, float x, float y, float d, float r, float f, float radius) {
+        BodyDef bodyDef = new BodyDef();
+        bodyDef.type = type;
+        bodyDef.position.set(SCENE_WIDTH * 0.5f + x, y);
+        bodyDef.angle = 0;
+        Body ball = world.createBody(bodyDef);
+
+        FixtureDef fixtureDef = new FixtureDef();
+        fixtureDef.density = d;
+        fixtureDef.restitution = r;
+        fixtureDef.friction = f;
+        fixtureDef.shape = new CircleShape();
+        fixtureDef.shape.setRadius(radius);
+
+        ball.createFixture(fixtureDef);
+        fixtureDef.shape.dispose();
+
+        return ball;
+    }
+
+    private Body createPolygon(BodyDef.BodyType type, float x, float y, float d, float r, float f, float halfwidth, float halfheight) {
+        BodyDef bodyDef = new BodyDef();
+        bodyDef.type = type;
+        bodyDef.position.set(SCENE_WIDTH * 0.5f + x, y);
+        bodyDef.angle = 0;
+        Body square = world.createBody(bodyDef);
+
+        FixtureDef fixtureDef = new FixtureDef();
+        fixtureDef.density = d;
+        fixtureDef.restitution = r;
+        fixtureDef.friction = f;
+        fixtureDef.shape = new PolygonShape();
+        ((PolygonShape) fixtureDef.shape).setAsBox(halfwidth, halfheight);
+
+        square.createFixture(fixtureDef);
+        fixtureDef.shape.dispose();
+
+        return square;
+    }
+
+    @Override
+    public void resize(int width, int height) {
+        viewport.update(width, height);
     }
 
     @Override
     public void dispose() {
+        debugRenderer.dispose();
+
         batch.dispose();
-        dropSound.dispose();
-        croowedSound.dispose();
-        shootSound.dispose();
+        world.dispose();
     }
 
     @Override
-    public boolean touchDown(float x, float y, int pointer, int button) {
-        point.set(x, y, 0); // Translate to world coordinates.
-        camera.unproject(point);
-        wasTouched = ballBody.getFixtureList().first().testPoint(point.x, point.y);
+    public void render() {
+        Gdx.gl.glClearColor(0, 0, 0, 1);
+        Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
 
-        return false;
-    }
+        world.step(1 / 60f, 6, 2);
 
-    @Override
-    public boolean tap(float x, float y, int count, int button) {
-        return false;
-    }
-
-    @Override
-    public boolean longPress(float x, float y) {
-        return false;
-    }
-
-    @Override
-    public boolean fling(float velocityX, float velocityY, int button) {
-
-        Gdx.app.log("Fling", "Stop");
-
-
-        if (Math.abs(velocityX) > Math.abs(velocityY)) {
-            if (velocityX > 0) {
-
-            } else {
-
-            }
-        } else {
-            if (velocityY > 0) {
-
-            } else {
-                if (wasTouched) {
-                    if (ballBody.getLinearVelocity().y == 0) {
-
-//                    shootSound.play();
-                        Vector2 initialVelocity = normalize(new Vector2(point2.x, point2.y),
-                                new Vector2(point.x, point.y));
-                        Gdx.app.log("Angle", "" + initialVelocity.x + ", " + initialVelocity.y);
-                        ballBody.setLinearVelocity(initialVelocity.x * 15, initialVelocity.y * 15);
-                        ballBody.setLinearDamping(0.98f);
-                        ballBody.getFixtureList().get(0).getShape().setRadius(0.4f);
-                    }
-                }
-            }
+        if (title != null) {
+            batch.begin();
+            viewport.getCamera().project(point.set(SCENE_WIDTH * 0.5f, 6.8f, 0));
+            font.draw(batch, title, point.x - titleWidth, point.y);
+            batch.end();
         }
 
-        return false;
-    }
-
-    private Vector2 normalize(Vector2 target, Vector2 start) {
-        return target.sub(start).nor();
-    }
-
-
-    @Override
-    public boolean pan(float x, float y, float deltaX, float deltaY) {
-        return false;
-    }
-
-    @Override
-    public boolean panStop(float x, float y, int pointer, int button) {
-        Gdx.app.log("PAN Stop", "Stop");
-        point2.set(x, y, 0);
-        camera.unproject(point2);
-        return false;
-    }
-
-    @Override
-    public boolean zoom(float initialDistance, float distance) {
-        return false;
-    }
-
-    @Override
-    public boolean pinch(Vector2 initialPointer1, Vector2 initialPointer2, Vector2 pointer1, Vector2 pointer2) {
-        return false;
-    }
-
-    @Override
-    public void pinchStop() {
-
-    }
-
-    @Override
-    public void beginContact(Contact contact) {
-        Fixture A = contact.getFixtureA();
-        Fixture B = contact.getFixtureB();
-
-        if (A.getBody().getType() == BodyDef.BodyType.KinematicBody) {
-//            dropSound.play();
-        } else if (B.getBody().getType() == BodyDef.BodyType.KinematicBody) {
-//            dropSound.play();
-        }
-
-    }
-
-    @Override
-    public void endContact(Contact contact) {
-
-    }
-
-    @Override
-    public void preSolve(Contact contact, Manifold oldManifold) {
-
-    }
-
-    @Override
-    public void postSolve(Contact contact, ContactImpulse impulse) {
-
+        debugRenderer.render(world, viewport.getCamera().combined);
     }
 }

@@ -42,10 +42,7 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
 
     ResolutionFileResolver fileResolver; // +++
 
-    float y; // +++
     float gravity = -9.81f; // +++ earths gravity is around 9.81 m/s^2 downwards
-    float velocity; // +++
-    float jumpHeight = 1f; // +++ jump 1 meter every time
 
     private World world;
     private Box2DDebugRenderer debugRender;
