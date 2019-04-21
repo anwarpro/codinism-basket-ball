@@ -26,13 +26,11 @@ import com.badlogic.gdx.physics.box2d.FixtureDef;
 import com.badlogic.gdx.physics.box2d.Manifold;
 import com.badlogic.gdx.physics.box2d.PolygonShape;
 import com.badlogic.gdx.physics.box2d.World;
-
-import java.util.LinkedList;
-
-import javax.swing.SizeSequence;
+import com.codinism.basketball.water.Pair;
+import com.codinism.basketball.water.Water;
 
 public class TestScale extends ApplicationAdapter implements GestureDetector.GestureListener, ContactListener {
-    private static final float BALL_RADIOS = 0.6f;
+    private static final float BALL_RADIOS = 0.5f;
     private static final float GROUND_Y = 0.5f;
     private static final float RIM_RADIOS = 0.02f;
     private static final float UPPER_GROUND_Y = 3f;
@@ -72,6 +70,12 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
     private Sprite spriteBall;
     private Sprite spriteFloor;
     private Sprite spriteWall;
+    private Sprite spriteTopMonitor;
+    private Sprite spriteSideMonitor;
+    private Sprite spriteBasketRim;
+    private Water water;
+    private Sprite spriteBasketNet;
+    private Sprite spriteBasketBack;
 
     private void createBall() {
         BodyDef bodyDef = new BodyDef();
@@ -107,7 +111,7 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
         FixtureDef fixtureDef = new FixtureDef();
         circle.setRadius(RIM_RADIOS);
         fixtureDef.shape = circle;
-        fixtureDef.density = 1f;
+        fixtureDef.density = 0f;
         fixtureDef.friction = 1f;
         fixtureDef.restitution = 0.2f; // Make it bounce a little bit
         fixtureDef.isSensor = true;
@@ -121,11 +125,11 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
         // Create our body definition
         BodyDef groundBodyDef = new BodyDef();
         groundBodyDef.type = BodyDef.BodyType.KinematicBody;
-        groundBodyDef.position.set(new Vector2(2, 0));
+        groundBodyDef.position.set(new Vector2(0, 0));
         groundBody = world.createBody(groundBodyDef);
 
         PolygonShape groundBox = new PolygonShape();
-        groundBox.setAsBox(cam.viewportWidth, 1f);
+        groundBox.setAsBox(cam.viewportWidth, 0.4f);
         groundFix = groundBody.createFixture(groundBox, 0.0f);
 
         Body groundBodyTop = world.createBody(groundBodyDef);
@@ -159,8 +163,14 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
         texture = new Texture(fileResolver.resolve("ball.png")); // +++
         spriteBall = new Sprite(texture);
 
+        spriteBasketRim = new Sprite(new Texture(fileResolver.resolve("new/basket-rim.png")));
+
         spriteFloor = new Sprite(new Texture(fileResolver.resolve("new/flor.png")));
         spriteWall = new Sprite(new Texture(fileResolver.resolve("new/wall.png")));
+        spriteTopMonitor = new Sprite(new Texture(fileResolver.resolve("new/monitor.png")));
+        spriteSideMonitor = new Sprite(new Texture(fileResolver.resolve("new/monitor2.png")));
+        spriteBasketNet = new Sprite(new Texture(fileResolver.resolve("new/basket-net.png")));
+        spriteBasketBack = new Sprite(new Texture(fileResolver.resolve("new/basket.png")));
     }
 
     public void create() {
@@ -177,6 +187,8 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
         world = new World(new Vector2(0, gravity), true);
         debugRender = new Box2DDebugRenderer();
 
+        water = new Water();
+
         createBall();
         createFloor();
 
@@ -184,6 +196,10 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
 
         Gdx.input.setInputProcessor(new GestureDetector(this));
         world.setContactListener(this);
+
+        water.createBody(world, leftBody.getPosition().x + 0.55f, leftBody.getPosition().y - 0.25f,
+                rightBody.getPosition().x - leftBody.getPosition().x, 0.5f); //world, x, y, width, height
+//        water.setDebugMode(true);
     }
 
     private void soundLoad() {
@@ -222,23 +238,50 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
         batch.begin();
 
         batch.draw(spriteFloor, 0, 0, cam.viewportWidth, UPPER_GROUND_Y + 0.5f);
-        batch.draw(spriteWall, 0, UPPER_GROUND_Y + 0.5f, cam.viewportWidth, 8 - (UPPER_GROUND_Y + 0.5f));
+        batch.draw(spriteWall, 0, UPPER_GROUND_Y + 0.5f,
+                cam.viewportWidth, 8 - (UPPER_GROUND_Y + 0.5f));
+
+        batch.draw(spriteTopMonitor, 0.5f, 8 - 1.3f,
+                cam.viewportWidth - (2 * 0.5f), 0.8f);
+
+        batch.draw(spriteSideMonitor, 0.2f, leftBody.getPosition().y - 0.125f,
+                0.5f, 0.25f);
+
+        spriteBasketBack.setSize((rightBody.getPosition().x - leftBody.getPosition().x) + 2 * 0.5f, 1.5f);
+        spriteBasketBack.setOriginCenter();
+        batch.draw(spriteBasketBack, leftBody.getPosition().x - 0.5f, 5f,
+                (rightBody.getPosition().x - leftBody.getPosition().x) + 2 * 0.5f, 1.5f);
+
+        spriteBasketNet.setSize(rightBody.getPosition().x - leftBody.getPosition().x, 0.8f);
+        spriteBasketNet.setOriginCenter();
+        batch.draw(spriteBasketNet, leftBody.getPosition().x - RIM_RADIOS, leftBody.getPosition().y - RIM_RADIOS - 0.8f,
+                rightBody.getPosition().x - leftBody.getPosition().x, 0.8f);
+
+        spriteBasketRim.setSize(4 * RIM_RADIOS, 4 * RIM_RADIOS);
+        spriteBasketRim.setOriginCenter();
+        batch.draw(spriteBasketRim, leftBody.getPosition().x - RIM_RADIOS, leftBody.getPosition().y - RIM_RADIOS,
+                rightBody.getPosition().x - leftBody.getPosition().x, 4 * RIM_RADIOS);
+
 
         spriteBall.setSize(2 * r, 2 * r);
         spriteBall.setOriginCenter();
         batch.draw(spriteBall, ballBody.getPosition().x - r, ballBody.getPosition().y - r,
                 r * 2, 2 * r);
 
+        if (topOfBasket) {
+            spriteBasketNet.setSize(rightBody.getPosition().x - leftBody.getPosition().x, 0.8f);
+            spriteBasketNet.setOriginCenter();
+            batch.draw(spriteBasketNet, leftBody.getPosition().x - RIM_RADIOS, leftBody.getPosition().y - RIM_RADIOS - 0.8f,
+                    rightBody.getPosition().x - leftBody.getPosition().x, 0.8f);
+        }
+
         batch.end();
 
-    /*    If a Sprite is used instead of a Texture the correct size has to be applied to the sprite.
-                To keep the origin in the center of the sprite it has to be adjusted too.*/
+//        debugRender.render(world, cam.combined);
+        world.step(1 / 60f, 6, 2);
 
-        //        sprite.setSize(1.8f, 1.8f);
-        //        sprite.setOriginCenter();
-
-        debugRender.render(world, cam.combined);
-        world.step(1 / 60f, 10, 6);
+//        water.update();
+//        water.draw(cam);
     }
 
     private void resetGame() {
@@ -258,9 +301,19 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
     }
 
     public void dispose() {
+
+        croowedSound.dispose();
+        dropSound1.dispose();
+        shootSound.dispose();
+
         texture.dispose();
         batch.dispose();
+        spriteBasketBack.getTexture().dispose();
+        spriteBasketBack.getTexture().dispose();
+        spriteBall.getTexture().dispose();
+        water.dispose();
         world.dispose();
+        debugRender.dispose();
     }
 
     @Override
@@ -287,6 +340,12 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
 
         float angle = -(float) Math.toDegrees(Math.atan2(velocityY, velocityX));
 
+        if (angle > 90) {
+            angle = 90 + ((angle - 90) / 5);
+        } else if (angle < 90) {
+            angle = 90 - ((90 - angle) / 5);
+        }
+
         if (Math.abs(velocityX) > Math.abs(velocityY)) {
             if (velocityX > 0) {
 
@@ -305,7 +364,6 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
                         float speed = new Vector2(ballBody.getPosition().x, ballBody.getPosition().y)
                                 .dst(new Vector2(point2.x, point2.y));
 
-                        Gdx.app.log("Angle", "" + angle);
 
                         shootSound.play();
 
@@ -381,6 +439,15 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
         } else if (!A.isSensor() || !B.isSensor()) {
             dropSound1.play();
         }
+
+
+        if (A.getBody().getUserData() instanceof Water && B.getBody().getType() == BodyDef.BodyType.DynamicBody) {
+            Water water = (Water) A.getBody().getUserData();
+            water.getFixturePairs().add(new Pair<Fixture, Fixture>(A, B));
+        } else if (B.getBody().getUserData() instanceof Water && A.getBody().getType() == BodyDef.BodyType.DynamicBody) {
+            Water water = (Water) B.getBody().getUserData();
+            water.getFixturePairs().add(new Pair<Fixture, Fixture>(A, B));
+        }
     }
 
     @Override
@@ -404,6 +471,14 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
             } else {
                 groundFixTop.setSensor(false);
             }
+        }
+
+        if (A.getBody().getUserData() instanceof Water && B.getBody().getType() == BodyDef.BodyType.DynamicBody) {
+            Water water = (Water) A.getBody().getUserData();
+            water.getFixturePairs().remove(new Pair<Fixture, Fixture>(A, B));
+        } else if (B.getBody().getUserData() instanceof Water && A.getBody().getType() == BodyDef.BodyType.DynamicBody) {
+            Water water = (Water) B.getBody().getUserData();
+            water.getFixturePairs().add(new Pair<Fixture, Fixture>(A, B));
         }
 
     }
