@@ -9,8 +9,10 @@ import com.badlogic.gdx.audio.Sound;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.Texture;
+import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.Sprite;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
+import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator;
 import com.badlogic.gdx.input.GestureDetector;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector2;
@@ -29,8 +31,13 @@ import com.badlogic.gdx.physics.box2d.Manifold;
 import com.badlogic.gdx.physics.box2d.PolygonShape;
 import com.badlogic.gdx.physics.box2d.Shape;
 import com.badlogic.gdx.physics.box2d.World;
-import com.codinism.basketball.water.Pair;
 import com.codinism.basketball.water.Water;
+
+import aurelienribon.tweenengine.BaseTween;
+import aurelienribon.tweenengine.Tween;
+import aurelienribon.tweenengine.TweenCallback;
+import aurelienribon.tweenengine.TweenEquations;
+import aurelienribon.tweenengine.TweenManager;
 
 public class TestScale extends ApplicationAdapter implements GestureDetector.GestureListener, ContactListener {
     private static final float BALL_RADIOS = 0.5f;
@@ -38,6 +45,7 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
     private static final float RIM_RADIOS = 0.02f;
     private static final float UPPER_GROUND_Y = 3f;
     final float VIRTUAL_HEIGHT = 8f;
+    private final TweenManager manager;
 
     OrthographicCamera cam;
     SpriteBatch batch;
@@ -73,7 +81,6 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
     private Sprite spriteTopMonitor;
     private Sprite spriteSideMonitor;
     private Sprite spriteBasketRim;
-    private Water water;
     private Sprite spriteBasketNet;
     private Sprite spriteBasketBack;
 
@@ -89,6 +96,20 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
 
     private Body basketSensor;
     private Sprite[] spriteBallJar;
+    private BitmapFont font12;
+    private OrthographicCamera uiCam;
+    private Sprite currentJar;
+    private Sprite currentContainer;
+    private Sprite[] winEmoji;
+    private boolean drawEmoji;
+    private Tween emoJiAnimatino;
+    private Sprite[] spriteBallContainer;
+    private Sprite spriteGem;
+
+    public TestScale() {
+        manager = new TweenManager();
+        Tween.registerAccessor(Sprite.class, new SpriteAccessor());
+    }
 
     private static FixtureDef makeFixture(int material, Shape shape) {
         FixtureDef fixtureDef = new FixtureDef();
@@ -251,12 +272,31 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
         spriteSideMonitor = new Sprite(new Texture(fileResolver.resolve("new/monitor2.png")));
         spriteBasketNet = new Sprite(new Texture(fileResolver.resolve("new/basket-net.png")));
         spriteBasketBack = new Sprite(new Texture(fileResolver.resolve("new/basket-background.png")));
+        spriteGem = new Sprite(new Texture(fileResolver.resolve("gem.png")));
 
         spriteBallJar = new Sprite[4];
 
         for (int i = 0; i < 4; i++) {
             spriteBallJar[i] = new Sprite(new Texture(fileResolver.resolve("basketjar/" + i + ".png")));
         }
+
+        spriteBallContainer = new Sprite[4];
+
+        for (int i = 0; i < 4; i++) {
+            spriteBallContainer[i] = new Sprite(new Texture(fileResolver.resolve("basketjar/container" + i + ".png")));
+        }
+
+        winEmoji = new Sprite[5];
+        for (int i = 0; i < 5; i++) {
+            winEmoji[i] = new Sprite(new Texture(
+                    fileResolver.resolve("emoji/win" + i + ".png")));
+        }
+
+        FreeTypeFontGenerator generator = new FreeTypeFontGenerator(Gdx.files.internal("font/The Happiness.ttf"));
+        FreeTypeFontGenerator.FreeTypeFontParameter parameter = new FreeTypeFontGenerator.FreeTypeFontParameter();
+        parameter.size = 12;
+        font12 = generator.generateFont(parameter); // font size 12 pixels
+        generator.dispose(); // don't forget to dispose to avoid memory leaks!
 
     }
 
@@ -270,6 +310,8 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
 
         cam = new OrthographicCamera();
         cam.setToOrtho(false, VIRTUAL_HEIGHT * Gdx.graphics.getWidth() / (float) Gdx.graphics.getHeight(), VIRTUAL_HEIGHT); // +++
+
+        uiCam = new OrthographicCamera(Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
 
         world = new World(new Vector2(0, gravity), true);
         debugRender = new Box2DDebugRenderer();
@@ -304,12 +346,104 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
     }
 
     public void render() {
+
         cam.update();
+        manager.update(Gdx.graphics.getDeltaTime());
 
         if (shoot && win && ballBody.getPosition().y < leftBody.getPosition().y) {
             if (win) {
                 croowedSound.play();
                 win = false;
+                drawEmoji = true;
+
+                winEmoji[0].setX(spriteTopMonitor.getX() + 1f);
+
+                emoJiAnimatino = Tween.to(winEmoji[0], SpriteAccessor.TYPE_X, 1.0f)
+                        .target(spriteTopMonitor.getWidth() - 0.5f)
+                        .ease(TweenEquations.easeInOutCubic)
+                        .setCallback(new TweenCallback() {
+                            @Override
+                            public void onEvent(int type, BaseTween<?> source) {
+                                drawEmoji = false;
+                            }
+                        })
+                        .setCallbackTriggers(TweenCallback.COMPLETE)
+                        .start(manager);
+
+            }
+        }
+
+        Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
+
+        float r = ballBody.getFixtureList().get(0).getShape().getRadius();
+
+        batch.begin();
+
+        batch.draw(spriteFloor, 0, 0, cam.viewportWidth, UPPER_GROUND_Y + 0.5f);
+        batch.draw(spriteWall, 0, UPPER_GROUND_Y + 0.5f,
+                cam.viewportWidth, 8 - (UPPER_GROUND_Y + 0.5f));
+
+        spriteTopMonitor.setSize(cam.viewportWidth - (2 * 0.5f), 0.8f);
+        spriteTopMonitor.setPosition(0.5f, 8 - 1.3f);
+
+        batch.draw(spriteTopMonitor, spriteTopMonitor.getX(), spriteTopMonitor.getY(),
+                spriteTopMonitor.getWidth(), spriteTopMonitor.getHeight());
+
+        if (drawEmoji) {
+            batch.draw(winEmoji[0], winEmoji[0].getX(),
+                    spriteTopMonitor.getY() + spriteTopMonitor.getHeight() / 4f, 0.5f, 0.5f);
+
+            batch.draw(spriteGem, spriteGem.getX(),
+                    spriteGem.getY(), 0.5f, 0.5f);
+        }
+
+        batch.setProjectionMatrix(uiCam.combined);
+        font12.draw(batch, "Score: " + ballStored, 0, 200);
+        batch.setProjectionMatrix(cam.combined);
+
+        batch.draw(spriteSideMonitor, 0.2f, leftBody.getPosition().y - 0.125f,
+                0.5f, 0.25f);
+
+        spriteBasketBack.setSize((rightBody.getPosition().x - leftBody.getPosition().x) + 2 * 0.5f, 1.5f);
+        spriteBasketBack.setOriginCenter();
+        batch.draw(spriteBasketBack, leftBody.getPosition().x - 0.5f, 5f,
+                (rightBody.getPosition().x - leftBody.getPosition().x) + 2 * 0.5f, 1.5f);
+
+        spriteBasketNet.setSize(rightBody.getPosition().x - leftBody.getPosition().x, 0.8f);
+        spriteBasketNet.setOriginCenter();
+
+        spriteBasketRim.setSize(rightBody.getPosition().x - leftBody.getPosition().x, 2 * BALL_RADIOS);
+        spriteBasketRim.setOriginCenter();
+        batch.draw(spriteBasketRim, leftBody.getPosition().x, leftBody.getPosition().y + 3 * RIM_RADIOS - 2 * BALL_RADIOS,
+                rightBody.getPosition().x - leftBody.getPosition().x, 2 * BALL_RADIOS);
+
+        spriteBall.setSize(2 * r, 2 * r);
+        spriteBall.setOriginCenter();
+        batch.draw(spriteBall, ballBody.getPosition().x - r, ballBody.getPosition().y - r,
+                r * 2, 2 * r);
+
+        if (round > 1) {
+            if (ballStored > 0) {
+                if (ballStored > 3) {
+                    currentJar = spriteBallJar[3];
+                    currentJar.setY(3f);
+                } else {
+                    currentJar = spriteBallJar[ballStored];
+                    currentJar.setY(3f);
+                }
+            } else {
+                currentJar = spriteBallJar[0];
+                currentJar.setY(3f);
+            }
+        } else {
+            if (ballStored > 0) {
+                if (ballStored > 3) {
+                    currentJar = spriteBallJar[3];
+                    currentJar.setY(3f);
+                } else {
+                    currentJar = spriteBallJar[ballStored];
+                    currentJar.setY(3f);
+                }
             }
         }
 
@@ -325,64 +459,31 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
                     ballStored = 0;
                     round++;
 
+//                    Tween.to(currentJar, SpriteAccessor.TYPE_Y, 10.0f)
+//                            .target(1f)
+//                            .start(manager);
+
                     resetGame();
+                } else {
+                    //game over
                 }
             }
         }
 
-        Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
+        if (currentJar != null) {
+            batch.draw(currentJar, cam.viewportWidth - 2f, currentJar.getY(), 1f, 2f);
+        }
 
-        float r = ballBody.getFixtureList().get(0).getShape().getRadius();
-        batch.begin();
-
-        batch.draw(spriteFloor, 0, 0, cam.viewportWidth, UPPER_GROUND_Y + 0.5f);
-        batch.draw(spriteWall, 0, UPPER_GROUND_Y + 0.5f,
-                cam.viewportWidth, 8 - (UPPER_GROUND_Y + 0.5f));
-
-        batch.draw(spriteTopMonitor, 0.5f, 8 - 1.3f,
-                cam.viewportWidth - (2 * 0.5f), 0.8f);
-
-        batch.draw(spriteSideMonitor, 0.2f, leftBody.getPosition().y - 0.125f,
-                0.5f, 0.25f);
-
-        spriteBasketBack.setSize((rightBody.getPosition().x - leftBody.getPosition().x) + 2 * 0.5f, 1.5f);
-        spriteBasketBack.setOriginCenter();
-        batch.draw(spriteBasketBack, leftBody.getPosition().x - 0.5f, 5f,
-                (rightBody.getPosition().x - leftBody.getPosition().x) + 2 * 0.5f, 1.5f);
-
-        spriteBasketNet.setSize(rightBody.getPosition().x - leftBody.getPosition().x, 0.8f);
-        spriteBasketNet.setOriginCenter();
-//        batch.draw(spriteBasketNet, leftBody.getPosition().x - RIM_RADIOS, leftBody.getPosition().y - RIM_RADIOS - 0.8f,
-//                rightBody.getPosition().x - leftBody.getPosition().x, 0.8f);
-
-        spriteBasketRim.setSize(rightBody.getPosition().x - leftBody.getPosition().x, 2 * BALL_RADIOS);
-        spriteBasketRim.setOriginCenter();
-        batch.draw(spriteBasketRim, leftBody.getPosition().x, leftBody.getPosition().y + 3 * RIM_RADIOS - 2 * BALL_RADIOS,
-                rightBody.getPosition().x - leftBody.getPosition().x, 2 * BALL_RADIOS);
-
-        spriteBall.setSize(2 * r, 2 * r);
-        spriteBall.setOriginCenter();
-        batch.draw(spriteBall, ballBody.getPosition().x - r, ballBody.getPosition().y - r,
-                r * 2, 2 * r);
-
-        if (round > 1) {
-            if (ballStored > 0) {
-                if (ballStored > 3) {
-                    batch.draw(spriteBallJar[3], cam.viewportWidth - 2f, 3f, 1f, 2f);
-                } else {
-                    batch.draw(spriteBallJar[ballStored], cam.viewportWidth - 2f, 3f, 1f, 2f);
-                }
-            } else {
-                batch.draw(spriteBallJar[0], cam.viewportWidth - 2f, 3f, 1f, 2f);
-            }
+        if (ballRemain - ballShooted >= 0) {
+            currentContainer = spriteBallContainer[ballRemain - ballShooted];
+            currentContainer.setY(1f);
         } else {
-            if (ballStored > 0) {
-                if (ballStored > 3) {
-                    batch.draw(spriteBallJar[3], cam.viewportWidth - 2f, 3f, 1f, 2f);
-                } else {
-                    batch.draw(spriteBallJar[ballStored], cam.viewportWidth - 2f, 3f, 1f, 2f);
-                }
-            }
+            currentContainer = spriteBallContainer[0];
+            currentContainer.setY(1f);
+        }
+
+        if (currentContainer != null) {
+            batch.draw(currentContainer, 0.5f, 0.5f, 2f, 1f);
         }
 
         if (topOfBasket) {
@@ -425,7 +526,6 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
         spriteBasketBack.getTexture().dispose();
         spriteBasketBack.getTexture().dispose();
         spriteBall.getTexture().dispose();
-//        water.dispose();
         world.dispose();
         debugRender.dispose();
     }
