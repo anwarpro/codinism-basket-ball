@@ -83,8 +83,12 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
     public static final int STONE = 3;
 
     private int ballShooted = 0;
+    private int ballRemain = 3;
     private int ballStored = 0;
+    private int round = 1;
+
     private Body basketSensor;
+    private Sprite[] spriteBallJar;
 
     private static FixtureDef makeFixture(int material, Shape shape) {
         FixtureDef fixtureDef = new FixtureDef();
@@ -209,7 +213,7 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
         //create basket sensor
 
         bodyDef.type = BodyDef.BodyType.StaticBody;
-        bodyDef.position.set(leftBody.getPosition().x + BALL_RADIOS, leftBody.getPosition().y - 0.4f);
+        bodyDef.position.set(leftBody.getPosition().x + BALL_RADIOS, leftBody.getPosition().y - 0.45f);
         basketSensor = world.createBody(bodyDef);
 
         groundBox.setAsBox(BALL_RADIOS,
@@ -221,7 +225,7 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
         // Create our body definition
         BodyDef basketSensorBodyDef = new BodyDef();
         basketSensorBodyDef.type = BodyDef.BodyType.StaticBody;
-        basketSensorBodyDef.position.set(new Vector2(0, 6f));
+        basketSensorBodyDef.position.set(new Vector2(0, leftBody.getPosition().y));
 
         Body sensor = world.createBody(basketSensorBodyDef);
         sensor.setUserData("basketline");
@@ -247,6 +251,13 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
         spriteSideMonitor = new Sprite(new Texture(fileResolver.resolve("new/monitor2.png")));
         spriteBasketNet = new Sprite(new Texture(fileResolver.resolve("new/basket-net.png")));
         spriteBasketBack = new Sprite(new Texture(fileResolver.resolve("new/basket-background.png")));
+
+        spriteBallJar = new Sprite[4];
+
+        for (int i = 0; i < 4; i++) {
+            spriteBallJar[i] = new Sprite(new Texture(fileResolver.resolve("basketjar/" + i + ".png")));
+        }
+
     }
 
     public void create() {
@@ -295,7 +306,6 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
     public void render() {
         cam.update();
 
-        Gdx.app.log("Mass", "" + ballBody.getMass());
         if (shoot && win && ballBody.getPosition().y < leftBody.getPosition().y) {
             if (win) {
                 croowedSound.play();
@@ -303,12 +313,21 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
             }
         }
 
-        if (shoot && ballBody.getLinearVelocity().y == 0) {
-            resetGame();
-        }
+        if (shoot && ballBody.getLinearVelocity().y == 0 ||
+                (ballBody.getPosition().x + BALL_RADIOS < 0 || ballBody.getPosition().x - BALL_RADIOS > cam.viewportWidth)) {
+            if (ballRemain - ballShooted > 0) {
+                resetGame();
+            } else {
+                if (ballStored > 0) {
 
-        if (ballBody.getPosition().x + BALL_RADIOS < 0 || ballBody.getPosition().x - BALL_RADIOS > cam.viewportWidth) {
-            resetGame();
+                    ballRemain = ballStored;
+                    ballShooted = 0;
+                    ballStored = 0;
+                    round++;
+
+                    resetGame();
+                }
+            }
         }
 
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
@@ -341,11 +360,30 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
         batch.draw(spriteBasketRim, leftBody.getPosition().x, leftBody.getPosition().y + 3 * RIM_RADIOS - 2 * BALL_RADIOS,
                 rightBody.getPosition().x - leftBody.getPosition().x, 2 * BALL_RADIOS);
 
-
         spriteBall.setSize(2 * r, 2 * r);
         spriteBall.setOriginCenter();
         batch.draw(spriteBall, ballBody.getPosition().x - r, ballBody.getPosition().y - r,
                 r * 2, 2 * r);
+
+        if (round > 1) {
+            if (ballStored > 0) {
+                if (ballStored > 3) {
+                    batch.draw(spriteBallJar[3], cam.viewportWidth - 2f, 3f, 1f, 2f);
+                } else {
+                    batch.draw(spriteBallJar[ballStored], cam.viewportWidth - 2f, 3f, 1f, 2f);
+                }
+            } else {
+                batch.draw(spriteBallJar[0], cam.viewportWidth - 2f, 3f, 1f, 2f);
+            }
+        } else {
+            if (ballStored > 0) {
+                if (ballStored > 3) {
+                    batch.draw(spriteBallJar[3], cam.viewportWidth - 2f, 3f, 1f, 2f);
+                } else {
+                    batch.draw(spriteBallJar[ballStored], cam.viewportWidth - 2f, 3f, 1f, 2f);
+                }
+            }
+        }
 
         if (topOfBasket) {
             spriteBasketRim.setOriginCenter();
@@ -358,8 +396,6 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
         debugRender.render(world, cam.combined);
         world.step(1 / 60f, 6, 2);
 
-//        water.update();
-//        water.draw(cam);
     }
 
     private void resetGame() {
@@ -438,10 +474,10 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
                     if (ballBody.getLinearVelocity().y == 0) {
 
                         shoot = true;
+                        ballShooted++;
 
                         float speed = new Vector2(ballBody.getPosition().x, ballBody.getPosition().y)
                                 .dst(new Vector2(point2.x, point2.y));
-
 
                         shootSound.play();
 
@@ -492,40 +528,22 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
         Fixture A = contact.getFixtureA();
         Fixture B = contact.getFixtureB();
 
-        if (A.getBody().getUserData() == "basketline") {
+        if (A.getBody().getUserData() == "BASKET") {
             if (topOfBasket) {
-                if (B.getBody().getPosition().x > leftBody.getPosition().x
-                        && B.getBody().getPosition().x < rightBody.getPosition().x) {
-                    win = true;
-                } else {
-                    lose = true;
-                }
+                win = true;
+                ballStored++;
             }
-            Gdx.app.log("win", "" + win + ", " + lose);
 
-        } else if (B.getBody().getUserData() == "basketline") {
+        } else if (B.getBody().getUserData() == "BASKET") {
             if (topOfBasket) {
-                if (A.getBody().getPosition().x > leftBody.getPosition().x
-                        && A.getBody().getPosition().x < rightBody.getPosition().x) {
-                    win = true;
-                } else {
-                    lose = true;
-                }
+                win = true;
+                ballStored++;
             }
-            Gdx.app.log("win", "" + win + ", " + lose);
 
         } else if (!A.isSensor() || !B.isSensor()) {
             dropSound1.play();
         }
 
-
-        if (A.getBody().getUserData() instanceof Water && B.getBody().getType() == BodyDef.BodyType.DynamicBody) {
-            Water water = (Water) A.getBody().getUserData();
-            water.getFixturePairs().add(new Pair<Fixture, Fixture>(A, B));
-        } else if (B.getBody().getUserData() instanceof Water && A.getBody().getType() == BodyDef.BodyType.DynamicBody) {
-            Water water = (Water) B.getBody().getUserData();
-            water.getFixturePairs().add(new Pair<Fixture, Fixture>(A, B));
-        }
     }
 
     @Override
@@ -549,14 +567,6 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
             } else {
                 groundFixTop.setSensor(false);
             }
-        }
-
-        if (A.getBody().getUserData() instanceof Water && B.getBody().getType() == BodyDef.BodyType.DynamicBody) {
-            Water water = (Water) A.getBody().getUserData();
-            water.getFixturePairs().remove(new Pair<Fixture, Fixture>(A, B));
-        } else if (B.getBody().getUserData() instanceof Water && A.getBody().getType() == BodyDef.BodyType.DynamicBody) {
-            Water water = (Water) B.getBody().getUserData();
-            water.getFixturePairs().add(new Pair<Fixture, Fixture>(A, B));
         }
 
     }
