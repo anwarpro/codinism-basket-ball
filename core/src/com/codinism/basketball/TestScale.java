@@ -12,6 +12,7 @@ import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.Sprite;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.input.GestureDetector;
+import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.math.Vector3;
 import com.badlogic.gdx.physics.box2d.Body;
@@ -21,10 +22,12 @@ import com.badlogic.gdx.physics.box2d.CircleShape;
 import com.badlogic.gdx.physics.box2d.Contact;
 import com.badlogic.gdx.physics.box2d.ContactImpulse;
 import com.badlogic.gdx.physics.box2d.ContactListener;
+import com.badlogic.gdx.physics.box2d.EdgeShape;
 import com.badlogic.gdx.physics.box2d.Fixture;
 import com.badlogic.gdx.physics.box2d.FixtureDef;
 import com.badlogic.gdx.physics.box2d.Manifold;
 import com.badlogic.gdx.physics.box2d.PolygonShape;
+import com.badlogic.gdx.physics.box2d.Shape;
 import com.badlogic.gdx.physics.box2d.World;
 import com.codinism.basketball.water.Pair;
 import com.codinism.basketball.water.Water;
@@ -74,10 +77,74 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
     private Sprite spriteBasketNet;
     private Sprite spriteBasketBack;
 
+    public static final int STEEL = 0;
+    public static final int WOOD = 1;
+    public static final int RUBBER = 2;
+    public static final int STONE = 3;
+
+    private int ballShooted = 0;
+    private int ballStored = 0;
+    private Body basketSensor;
+
+    private static FixtureDef makeFixture(int material, Shape shape) {
+        FixtureDef fixtureDef = new FixtureDef();
+        fixtureDef.shape = shape;
+
+        switch (material) {
+            case 0:
+                fixtureDef.density = 1f;
+                fixtureDef.friction = 0.3f;
+                fixtureDef.restitution = 0.1f;
+                break;
+            case 1:
+                fixtureDef.density = 0.5f;
+                fixtureDef.friction = 0.7f;
+                fixtureDef.restitution = 0.3f;
+                break;
+            case 2:
+                fixtureDef.density = 1f;
+                fixtureDef.friction = 0f;
+                fixtureDef.restitution = 1f;
+                break;
+            case 3:
+                fixtureDef.density = 1f;
+                fixtureDef.friction = 0.9f;
+                fixtureDef.restitution = 0.01f;
+            default:
+                fixtureDef.density = 7f;
+                fixtureDef.friction = 0.5f;
+                fixtureDef.restitution = 0.3f;
+        }
+        return fixtureDef;
+    }
+
+    private void makeChainShape(World world) {
+
+        BodyDef bodyDef = new BodyDef();
+        bodyDef.type = BodyDef.BodyType.StaticBody;
+        bodyDef.position.set(leftBody.getPosition().x, leftBody.getPosition().y);
+        bodyDef.angle = 0;
+
+        Body body = world.createBody(bodyDef);
+
+        EdgeShape es = new EdgeShape();
+        es.set(leftBody.getPosition().x, leftBody.getPosition().y,
+                leftBody.getPosition().x, 2f);
+
+        body.setTransform(leftBody.getPosition().x, leftBody.getPosition().y,
+                MathUtils.atan2(2f - leftBody.getPosition().y,
+                        leftBody.getPosition().x + 0.25f - leftBody.getPosition().x));
+
+        FixtureDef fixtureDef = makeFixture(RUBBER, es);
+
+        body.createFixture(fixtureDef);
+
+    }
+
     private void createBall() {
         BodyDef bodyDef = new BodyDef();
         bodyDef.type = BodyDef.BodyType.DynamicBody;
-        bodyDef.position.set(cam.viewportWidth / 2f, 4f);
+        bodyDef.position.set(cam.viewportWidth / 2f, 3f);
 
         ballBody = world.createBody(bodyDef);
 
@@ -88,9 +155,9 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
         // Create a fixture definition to apply our shape to
         FixtureDef fixtureDef = new FixtureDef();
         fixtureDef.shape = circle;
-        fixtureDef.density = 0.5f;
+        fixtureDef.density = 0.000001f;
         fixtureDef.friction = 0.5f;
-        fixtureDef.restitution = 0.6f; // Make it bounce a little bit
+        fixtureDef.restitution = 0.5f; // Make it bounce a little bit
         ballBody.createFixture(fixtureDef);
 
         shoot = false;
@@ -114,7 +181,7 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
         fixtureDef.isSensor = true;
         leftBody.createFixture(fixtureDef);
 
-        bodyDef.position.set(leftBody.getPosition().x + 2 * 0.55f, leftBody.getPosition().y);
+        bodyDef.position.set(leftBody.getPosition().x + 2 * BALL_RADIOS, leftBody.getPosition().y);
         rightBody = world.createBody(bodyDef);
         rightBody.createFixture(fixtureDef);
 
@@ -127,7 +194,8 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
 
         PolygonShape groundBox = new PolygonShape();
         groundBox.setAsBox(cam.viewportWidth, 0.4f);
-        groundFix = groundBody.createFixture(groundBox, 0.0f);
+
+        groundFix = groundBody.createFixture(makeFixture(WOOD, groundBox));
 
         Body groundBodyTop = world.createBody(groundBodyDef);
         groundBox.setAsBox(cam.viewportWidth, UPPER_GROUND_Y);
@@ -138,6 +206,17 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
         fixtureDef1.shape = groundBox;
         groundFixTop = groundBodyTop.createFixture(fixtureDef1);
 
+        //create basket sensor
+
+        bodyDef.type = BodyDef.BodyType.StaticBody;
+        bodyDef.position.set(leftBody.getPosition().x + BALL_RADIOS, leftBody.getPosition().y - 0.4f);
+        basketSensor = world.createBody(bodyDef);
+
+        groundBox.setAsBox(BALL_RADIOS,
+                0.4f);
+        fixtureDef1.shape = groundBox;
+        basketSensor.createFixture(fixtureDef1);
+        basketSensor.setUserData("BASKET");
 
         // Create our body definition
         BodyDef basketSensorBodyDef = new BodyDef();
@@ -160,14 +239,14 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
         texture = new Texture(fileResolver.resolve("ball.png")); // +++
         spriteBall = new Sprite(texture);
 
-        spriteBasketRim = new Sprite(new Texture(fileResolver.resolve("new/basket-rim.png")));
+        spriteBasketRim = new Sprite(new Texture(fileResolver.resolve("new/busket-transprans.png")));
 
         spriteFloor = new Sprite(new Texture(fileResolver.resolve("new/flor.png")));
         spriteWall = new Sprite(new Texture(fileResolver.resolve("new/wall.png")));
         spriteTopMonitor = new Sprite(new Texture(fileResolver.resolve("new/monitor.png")));
         spriteSideMonitor = new Sprite(new Texture(fileResolver.resolve("new/monitor2.png")));
         spriteBasketNet = new Sprite(new Texture(fileResolver.resolve("new/basket-net.png")));
-        spriteBasketBack = new Sprite(new Texture(fileResolver.resolve("new/basket.png")));
+        spriteBasketBack = new Sprite(new Texture(fileResolver.resolve("new/basket-background.png")));
     }
 
     public void create() {
@@ -184,18 +263,20 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
         world = new World(new Vector2(0, gravity), true);
         debugRender = new Box2DDebugRenderer();
 
-        water = new Water();
+//        water = new Water();
 
         createBall();
         createFloor();
+
+        makeChainShape(world);
 
         soundLoad();
 
         Gdx.input.setInputProcessor(new GestureDetector(this));
         world.setContactListener(this);
 
-        water.createBody(world, leftBody.getPosition().x + 0.55f, leftBody.getPosition().y - 0.25f,
-                rightBody.getPosition().x - leftBody.getPosition().x, 0.5f); //world, x, y, width, height
+//        water.createBody(world, leftBody.getPosition().x + 0.55f, leftBody.getPosition().y - 0.25f,
+//                rightBody.getPosition().x - leftBody.getPosition().x, 0.5f); //world, x, y, width, height
 //        water.setDebugMode(true);
     }
 
@@ -214,6 +295,7 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
     public void render() {
         cam.update();
 
+        Gdx.app.log("Mass", "" + ballBody.getMass());
         if (shoot && win && ballBody.getPosition().y < leftBody.getPosition().y) {
             if (win) {
                 croowedSound.play();
@@ -251,13 +333,13 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
 
         spriteBasketNet.setSize(rightBody.getPosition().x - leftBody.getPosition().x, 0.8f);
         spriteBasketNet.setOriginCenter();
-        batch.draw(spriteBasketNet, leftBody.getPosition().x - RIM_RADIOS, leftBody.getPosition().y - RIM_RADIOS - 0.8f,
-                rightBody.getPosition().x - leftBody.getPosition().x, 0.8f);
+//        batch.draw(spriteBasketNet, leftBody.getPosition().x - RIM_RADIOS, leftBody.getPosition().y - RIM_RADIOS - 0.8f,
+//                rightBody.getPosition().x - leftBody.getPosition().x, 0.8f);
 
-        spriteBasketRim.setSize(4 * RIM_RADIOS, 4 * RIM_RADIOS);
+        spriteBasketRim.setSize(rightBody.getPosition().x - leftBody.getPosition().x, 2 * BALL_RADIOS);
         spriteBasketRim.setOriginCenter();
-        batch.draw(spriteBasketRim, leftBody.getPosition().x - RIM_RADIOS, leftBody.getPosition().y - RIM_RADIOS,
-                rightBody.getPosition().x - leftBody.getPosition().x, 4 * RIM_RADIOS);
+        batch.draw(spriteBasketRim, leftBody.getPosition().x, leftBody.getPosition().y + 3 * RIM_RADIOS - 2 * BALL_RADIOS,
+                rightBody.getPosition().x - leftBody.getPosition().x, 2 * BALL_RADIOS);
 
 
         spriteBall.setSize(2 * r, 2 * r);
@@ -266,15 +348,14 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
                 r * 2, 2 * r);
 
         if (topOfBasket) {
-            spriteBasketNet.setSize(rightBody.getPosition().x - leftBody.getPosition().x, 0.8f);
-            spriteBasketNet.setOriginCenter();
-            batch.draw(spriteBasketNet, leftBody.getPosition().x - RIM_RADIOS, leftBody.getPosition().y - RIM_RADIOS - 0.8f,
-                    rightBody.getPosition().x - leftBody.getPosition().x, 0.8f);
+            spriteBasketRim.setOriginCenter();
+            batch.draw(spriteBasketRim, leftBody.getPosition().x, leftBody.getPosition().y + (3 * RIM_RADIOS) - 2 * BALL_RADIOS,
+                    rightBody.getPosition().x - leftBody.getPosition().x, 2 * BALL_RADIOS);
         }
 
         batch.end();
 
-//        debugRender.render(world, cam.combined);
+        debugRender.render(world, cam.combined);
         world.step(1 / 60f, 6, 2);
 
 //        water.update();
@@ -308,7 +389,7 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
         spriteBasketBack.getTexture().dispose();
         spriteBasketBack.getTexture().dispose();
         spriteBall.getTexture().dispose();
-        water.dispose();
+//        water.dispose();
         world.dispose();
         debugRender.dispose();
     }
