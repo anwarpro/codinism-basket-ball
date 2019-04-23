@@ -109,6 +109,7 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
     private Sprite currentJarBottom;
     private Body leftLine;
     private Body rightLine;
+    private boolean gameOver;
 
     public TestScale() {
         manager = new TweenManager();
@@ -465,6 +466,7 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
                         resetGame();
                     } else {
                         //game over
+                        gameOver = true;
                     }
                 }
             } else {
@@ -478,6 +480,7 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
                     resetGame();
                 } else {
                     //game over
+                    gameOver = true;
                 }
             }
         }
@@ -508,7 +511,7 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
             batch.draw(currentJar, cam.viewportWidth - 2f, currentJar.getY(), 1f, 2f);
         }
 
-        if (ballRemain - ballShooted >= 0) {
+        if (ballRemain - ballShooted >= 0 && ballRemain - ballShooted < 4) {
             currentContainer = spriteBallContainer[ballRemain - ballShooted];
             currentContainer.setY(1f);
         } else {
@@ -526,11 +529,26 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
                     rightBody.getPosition().x - leftBody.getPosition().x, 2 * BALL_RADIOS);
         }
 
+        if (gameOver) {
+            gameOver();
+        }
+
+        if (shoot) {
+            Gdx.app.log("Remain", "Ramain: " + ballRemain + ", shooted: " + ballShooted);
+        }
+
         batch.end();
 
         debugRender.render(world, cam.combined);
         world.step(1 / 60f, 6, 2);
 
+    }
+
+    private void gameOver() {
+        batch.setProjectionMatrix(uiCam.combined);
+        font12.draw(batch, "Game over!", 0, 0);
+        font12.draw(batch, "Touch to restart", 0, 12);
+        batch.setProjectionMatrix(cam.combined);
     }
 
     private void resetGame() {
@@ -558,17 +576,25 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
         dropSound1.dispose();
         shootSound.dispose();
 
+        font12.dispose();
+
         texture.dispose();
         batch.dispose();
         spriteBasketBack.getTexture().dispose();
         spriteBasketBack.getTexture().dispose();
         spriteBall.getTexture().dispose();
-        world.dispose();
         debugRender.dispose();
+        world.dispose();
     }
 
     @Override
     public boolean touchDown(float x, float y, int pointer, int button) {
+        if (gameOver) {
+            gameOver = false;
+            round = 0;
+            score = 0;
+            resetGame();
+        }
         point = new Vector3();
         point.set(x, y, 0); // Translate to world coordinates.
         cam.unproject(point);
@@ -607,7 +633,7 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
             if (velocityY > 0) {
 
             } else {
-                if (wasTouched) {
+                if (wasTouched && !gameOver) {
                     if (ballBody.getLinearVelocity().y == 0) {
 
                         shoot = true;
