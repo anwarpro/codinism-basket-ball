@@ -31,6 +31,8 @@ import com.badlogic.gdx.physics.box2d.PolygonShape;
 import com.badlogic.gdx.physics.box2d.Shape;
 import com.badlogic.gdx.physics.box2d.World;
 
+import java.util.Random;
+
 import aurelienribon.tweenengine.BaseTween;
 import aurelienribon.tweenengine.Tween;
 import aurelienribon.tweenengine.TweenCallback;
@@ -115,6 +117,7 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
     private int retry = 0;
     private Tween leftInJar;
     private Tween topDownContainer;
+    private int number = 0;
 
     public TestScale() {
         manager = new TweenManager();
@@ -294,7 +297,7 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
         for (int i = 0; i < 4; i++) {
             spriteBallJar[i] = new Sprite(new Texture(fileResolver.resolve("basketjar/" + i + ".png")));
             spriteBallJar[i].setY(3.4f);
-            spriteBallJar[i].setX(0.5f);
+            spriteBallJar[i].setX(0.2f);
         }
 
         spriteBallContainer = new Sprite[4];
@@ -302,6 +305,7 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
         for (int i = 0; i < 4; i++) {
             spriteBallContainer[i] = new Sprite(new Texture(fileResolver.resolve("basketjar/" + i + ".png")));
             spriteBallContainer[i].setY(0.5f);
+            spriteBallContainer[i].setX(0.1f);
         }
 
         winEmoji = new Sprite[5];
@@ -370,6 +374,11 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
         cam.update();
     }
 
+    private static int getRandomNumberInRange(int min, int max) {
+        Random r = new Random();
+        return r.nextInt((max - min) + 1) + min;
+    }
+
     public void render() {
 
         cam.update();
@@ -381,9 +390,11 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
                 win = false;
                 drawEmoji = true;
 
-                winEmoji[0].setX(spriteTopMonitor.getX() + 1f);
+                number = getRandomNumberInRange(0, 5);
 
-                emoJiAnimatino = Tween.to(winEmoji[0], SpriteAccessor.TYPE_X, 1.0f)
+                winEmoji[number].setX(spriteTopMonitor.getX() + 1f);
+
+                emoJiAnimatino = Tween.to(winEmoji[number], SpriteAccessor.TYPE_X, 1.0f)
                         .target(spriteTopMonitor.getWidth() - 0.5f)
                         .ease(TweenEquations.easeInOutCubic)
                         .setCallback(new TweenCallback() {
@@ -398,7 +409,7 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
                 if (round == 2 && retry == 0) {
                     drawGem = true;
                     spriteGem.setPosition(cam.viewportWidth / 2f, cam.viewportHeight / 2f);
-                    gemAnimation = Tween.to(spriteGem, SpriteAccessor.TYPE_XY, 1.0f)
+                    gemAnimation = Tween.to(spriteGem, SpriteAccessor.TYPE_XY, 2.0f)
                             .target(cam.viewportWidth, cam.viewportHeight)
                             .ease(TweenEquations.easeInOutCubic)
                             .setCallback(new TweenCallback() {
@@ -431,13 +442,13 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
                 spriteTopMonitor.getWidth(), spriteTopMonitor.getHeight());
 
         batch.setProjectionMatrix(uiCam.combined);
-        batch.draw(spriteSideMonitor, 20, uiCam.viewportHeight - 120,
+        batch.draw(spriteSideMonitor, 20, uiCam.viewportHeight / 2f + (uiCam.viewportHeight / 2f / 2f),
                 60, 30);
-        font12.draw(batch, String.format("%02d", score), 40, uiCam.viewportHeight - 102);
+        font12.draw(batch, String.format("%02d", score), 40, uiCam.viewportHeight / 2f + (uiCam.viewportHeight / 2f / 2f) + 15);
         batch.setProjectionMatrix(cam.combined);
 
         if (drawEmoji) {
-            batch.draw(winEmoji[0], winEmoji[0].getX(),
+            batch.draw(winEmoji[number], winEmoji[number].getX(),
                     spriteTopMonitor.getY() + spriteTopMonitor.getHeight() / 4f, 0.5f, 0.5f);
         }
 
@@ -503,7 +514,7 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
         }
 
         if (currentContainer != null && round > 1) {
-            batch.draw(currentContainer, 0.5f, currentContainer.getY(), 0.5f, 1f);
+            batch.draw(currentContainer, currentContainer.getX(), currentContainer.getY(), 0.5f, 1f);
         }
 
         spriteBall.setSize(2 * r, 2 * r);
