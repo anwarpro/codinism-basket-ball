@@ -110,6 +110,7 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
     private Body leftLine;
     private Body rightLine;
     private boolean gameOver;
+    private BitmapFont font26;
 
     public TestScale() {
         manager = new TweenManager();
@@ -281,7 +282,7 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
 
         for (int i = 0; i < 4; i++) {
             spriteBallJar[i] = new Sprite(new Texture(fileResolver.resolve("basketjar/" + i + ".png")));
-            spriteBallJar[i].setY(3f);
+            spriteBallJar[i].setY(3.4f);
         }
 
         spriteBallContainer = new Sprite[4];
@@ -300,6 +301,8 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
         FreeTypeFontGenerator.FreeTypeFontParameter parameter = new FreeTypeFontGenerator.FreeTypeFontParameter();
         parameter.size = 22;
         font12 = generator.generateFont(parameter); // font size 12 pixels
+        parameter.size = 26;
+        font26 = generator.generateFont(parameter);
         generator.dispose(); // don't forget to dispose to avoid memory leaks!
 
     }
@@ -416,7 +419,7 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
         Vector3 pointWorld = new Vector3(0.2f, leftBody.getPosition().y - 0.125f, 0);
         uiCam.unproject(pointWorld);
         batch.setProjectionMatrix(uiCam.combined);
-        font12.draw(batch, "score : " + score, pointWorld.x, Gdx.graphics.getHeight() / 2f - pointWorld.y);
+        font12.draw(batch, "score : " + score, 200, -200);
         batch.setProjectionMatrix(cam.combined);
 
         if (drawEmoji) {
@@ -453,7 +456,7 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
             if (round == 1 && ballStored < 3) {
                 resetGame();
             } else if (round == 2) {
-                if (ballRemain - ballShooted > 0) {
+                if (ballRemain > 0) {
                     resetGame();
                 } else {
                     if (ballStored > 0) {
@@ -470,17 +473,22 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
                     }
                 }
             } else {
-                if (ballStored > 0) {
 
-                    ballRemain = ballStored;
-                    ballShooted = 0;
-                    ballStored = 0;
-                    round++;
-
+                if (ballRemain > 0) {
                     resetGame();
                 } else {
-                    //game over
-                    gameOver = true;
+                    if (ballStored > 0) {
+
+                        ballRemain = ballStored;
+                        ballShooted = 0;
+                        ballStored = 0;
+                        round++;
+
+                        resetGame();
+                    } else {
+                        //game over
+                        gameOver = true;
+                    }
                 }
             }
         }
@@ -496,7 +504,6 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
                 currentJar = spriteBallJar[0];
             }
 
-
         } else {
             if (ballStored > 0) {
                 if (ballStored > 3) {
@@ -508,11 +515,11 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
         }
 
         if (currentJar != null) {
-            batch.draw(currentJar, cam.viewportWidth - 2f, currentJar.getY(), 1f, 2f);
+            batch.draw(currentJar, 0.5f, currentJar.getY(), 0.5f, 1f);
         }
 
-        if (ballRemain - ballShooted >= 0 && ballRemain - ballShooted < 4) {
-            currentContainer = spriteBallContainer[ballRemain - ballShooted];
+        if (ballRemain >= 0 && ballRemain < 4) {
+            currentContainer = spriteBallContainer[ballRemain];
             currentContainer.setY(1f);
         } else {
             currentContainer = spriteBallContainer[0];
@@ -520,7 +527,7 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
         }
 
         if (currentContainer != null && round > 1) {
-            batch.draw(currentContainer, cam.viewportWidth - 2f, 0.5f, 1f, 2f);
+            batch.draw(currentContainer, 0.5f, 0.5f, 0.5f, 1f);
         }
 
         if (topOfBasket) {
@@ -534,20 +541,20 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
         }
 
         if (shoot) {
-            Gdx.app.log("Remain", "Ramain: " + ballRemain + ", shooted: " + ballShooted);
+            Gdx.app.log("Statics", "Remain: " + ballRemain + ", shooted: " + ballShooted + ", stored: " + ballStored);
         }
 
         batch.end();
 
-        debugRender.render(world, cam.combined);
+//        debugRender.render(world, cam.combined);
         world.step(1 / 60f, 6, 2);
 
     }
 
     private void gameOver() {
         batch.setProjectionMatrix(uiCam.combined);
-        font12.draw(batch, "Game over!", 0, 0);
-        font12.draw(batch, "Touch to restart", 0, 12);
+        font26.draw(batch, "Game over!", 0, 0);
+        font26.draw(batch, "Touch to restart", 0, -18);
         batch.setProjectionMatrix(cam.combined);
     }
 
@@ -567,6 +574,9 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
         rightLine.getFixtureList().get(0).setSensor(true);
 
         createBall();
+        if (round > 2) {
+            ballBody.getPosition().set(ballBody.getPosition().x + round * 2, ballBody.getPosition().y);
+        }
 
     }
 
@@ -638,6 +648,7 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
 
                         shoot = true;
                         ballShooted++;
+                        ballRemain--;
 
                         float speed = new Vector2(ballBody.getPosition().x, ballBody.getPosition().y)
                                 .dst(new Vector2(point2.x, point2.y));
