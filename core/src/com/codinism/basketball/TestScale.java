@@ -216,12 +216,17 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
         rightBody = world.createBody(bodyDef);
         rightBody.createFixture(fixtureDef);
 
+        leftBody.setUserData("beep");
+        rightBody.setUserData("beep");
+
 
         // Create our body definition
         BodyDef groundBodyDef = new BodyDef();
         groundBodyDef.type = BodyDef.BodyType.KinematicBody;
         groundBodyDef.position.set(new Vector2(0, 0));
         groundBody = world.createBody(groundBodyDef);
+
+        groundBody.setUserData("beep");
 
         PolygonShape groundBox = new PolygonShape();
         groundBox.setAsBox(cam.viewportWidth, 0.4f);
@@ -236,6 +241,8 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
         fixtureDef1.isSensor = true;
         fixtureDef1.shape = groundBox;
         groundFixTop = groundBodyTop.createFixture(fixtureDef1);
+
+        groundBodyTop.setUserData("beep");
 
         //create basket sensor
 
@@ -730,8 +737,17 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
                 score++;
             }
 
-        } else if (!A.isSensor() || !B.isSensor()) {
-            dropSound1.play();
+        } else if (!A.isSensor() && !B.isSensor()) {
+            Gdx.app.log("Hit", "A: " + A.getBody().getUserData() + " B: " + B.getBody().getUserData());
+            if (A.getBody().getUserData() != null) {
+                if (A.getBody().getUserData() == "beep") {
+                    dropSound1.play();
+                }
+            } else if (B.getBody().getUserData() != null) {
+                if (B.getBody().getUserData() == "beep") {
+                    dropSound1.play();
+                }
+            }
         }
 
     }
