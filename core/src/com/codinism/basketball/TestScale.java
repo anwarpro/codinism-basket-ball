@@ -14,7 +14,6 @@ import com.badlogic.gdx.graphics.g2d.Sprite;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator;
 import com.badlogic.gdx.input.GestureDetector;
-import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.math.Vector3;
 import com.badlogic.gdx.physics.box2d.Body;
@@ -31,7 +30,6 @@ import com.badlogic.gdx.physics.box2d.Manifold;
 import com.badlogic.gdx.physics.box2d.PolygonShape;
 import com.badlogic.gdx.physics.box2d.Shape;
 import com.badlogic.gdx.physics.box2d.World;
-import com.codinism.basketball.water.Water;
 
 import aurelienribon.tweenengine.BaseTween;
 import aurelienribon.tweenengine.Tween;
@@ -93,6 +91,7 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
     private int ballRemain = 3;
     private int ballStored = 0;
     private int round = 1;
+    private int score = 0;
 
     private Body basketSensor;
     private Sprite[] spriteBallJar;
@@ -105,6 +104,11 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
     private Tween emoJiAnimatino;
     private Sprite[] spriteBallContainer;
     private Sprite spriteGem;
+    private boolean drawGem;
+    private Tween gemAnimation;
+    private Sprite currentJarBottom;
+    private Body leftLine;
+    private Body rightLine;
 
     public TestScale() {
         manager = new TweenManager();
@@ -143,27 +147,25 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
         return fixtureDef;
     }
 
-    private void makeChainShape(World world) {
+    private Body makeChainShape(World world, Body body, boolean increment) {
 
         BodyDef bodyDef = new BodyDef();
         bodyDef.type = BodyDef.BodyType.StaticBody;
-        bodyDef.position.set(leftBody.getPosition().x, leftBody.getPosition().y);
+//        bodyDef.position.set(1, 1f);
         bodyDef.angle = 0;
 
-        Body body = world.createBody(bodyDef);
+        Body bodyCreate = world.createBody(bodyDef);
 
         EdgeShape es = new EdgeShape();
-        es.set(leftBody.getPosition().x, leftBody.getPosition().y,
-                leftBody.getPosition().x, 2f);
+        es.set(increment ? body.getPosition().x + 0.07f : body.getPosition().x - 0.07f, body.getPosition().y - 0.8f,
+                body.getPosition().x, body.getPosition().y - 0.1f);
 
-        body.setTransform(leftBody.getPosition().x, leftBody.getPosition().y,
-                MathUtils.atan2(2f - leftBody.getPosition().y,
-                        leftBody.getPosition().x + 0.25f - leftBody.getPosition().x));
+        FixtureDef fixtureDef = makeFixture(STEEL, es);
+        fixtureDef.isSensor = true;
 
-        FixtureDef fixtureDef = makeFixture(RUBBER, es);
+        bodyCreate.createFixture(fixtureDef);
 
-        body.createFixture(fixtureDef);
-
+        return bodyCreate;
     }
 
     private void createBall() {
@@ -234,7 +236,7 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
         //create basket sensor
 
         bodyDef.type = BodyDef.BodyType.StaticBody;
-        bodyDef.position.set(leftBody.getPosition().x + BALL_RADIOS, leftBody.getPosition().y - 0.45f);
+        bodyDef.position.set(leftBody.getPosition().x + BALL_RADIOS, leftBody.getPosition().y - 0.65f);
         basketSensor = world.createBody(bodyDef);
 
         groundBox.setAsBox(BALL_RADIOS,
@@ -278,12 +280,13 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
 
         for (int i = 0; i < 4; i++) {
             spriteBallJar[i] = new Sprite(new Texture(fileResolver.resolve("basketjar/" + i + ".png")));
+            spriteBallJar[i].setY(3f);
         }
 
         spriteBallContainer = new Sprite[4];
 
         for (int i = 0; i < 4; i++) {
-            spriteBallContainer[i] = new Sprite(new Texture(fileResolver.resolve("basketjar/container" + i + ".png")));
+            spriteBallContainer[i] = new Sprite(new Texture(fileResolver.resolve("basketjar/" + i + ".png")));
         }
 
         winEmoji = new Sprite[5];
@@ -294,7 +297,7 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
 
         FreeTypeFontGenerator generator = new FreeTypeFontGenerator(Gdx.files.internal("font/The Happiness.ttf"));
         FreeTypeFontGenerator.FreeTypeFontParameter parameter = new FreeTypeFontGenerator.FreeTypeFontParameter();
-        parameter.size = 12;
+        parameter.size = 22;
         font12 = generator.generateFont(parameter); // font size 12 pixels
         generator.dispose(); // don't forget to dispose to avoid memory leaks!
 
@@ -321,7 +324,8 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
         createBall();
         createFloor();
 
-        makeChainShape(world);
+        leftLine = makeChainShape(world, leftBody, true);
+        rightLine = makeChainShape(world, rightBody, false);
 
         soundLoad();
 
@@ -370,6 +374,22 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
                         .setCallbackTriggers(TweenCallback.COMPLETE)
                         .start(manager);
 
+                if (round == 2) {
+                    drawGem = true;
+                    spriteGem.setPosition(cam.viewportWidth / 2f, cam.viewportHeight / 2f);
+                    gemAnimation = Tween.to(spriteGem, SpriteAccessor.TYPE_XY, 1.0f)
+                            .target(cam.viewportWidth, cam.viewportHeight)
+                            .ease(TweenEquations.easeInOutCubic)
+                            .setCallback(new TweenCallback() {
+                                @Override
+                                public void onEvent(int type, BaseTween<?> source) {
+                                    drawGem = false;
+                                }
+                            })
+                            .setCallbackTriggers(TweenCallback.COMPLETE)
+                            .start(manager);
+                }
+
             }
         }
 
@@ -389,20 +409,25 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
         batch.draw(spriteTopMonitor, spriteTopMonitor.getX(), spriteTopMonitor.getY(),
                 spriteTopMonitor.getWidth(), spriteTopMonitor.getHeight());
 
+        batch.draw(spriteSideMonitor, 0.2f, leftBody.getPosition().y - 0.125f,
+                0.5f, 0.25f);
+
+        Vector3 pointWorld = new Vector3(0.2f, leftBody.getPosition().y - 0.125f, 0);
+        uiCam.unproject(pointWorld);
+        batch.setProjectionMatrix(uiCam.combined);
+        font12.draw(batch, "score : " + score, pointWorld.x, Gdx.graphics.getHeight() / 2f - pointWorld.y);
+        batch.setProjectionMatrix(cam.combined);
+
         if (drawEmoji) {
             batch.draw(winEmoji[0], winEmoji[0].getX(),
                     spriteTopMonitor.getY() + spriteTopMonitor.getHeight() / 4f, 0.5f, 0.5f);
+        }
 
+        if (drawGem) {
             batch.draw(spriteGem, spriteGem.getX(),
                     spriteGem.getY(), 0.5f, 0.5f);
         }
 
-        batch.setProjectionMatrix(uiCam.combined);
-        font12.draw(batch, "Score: " + ballStored, 0, 200);
-        batch.setProjectionMatrix(cam.combined);
-
-        batch.draw(spriteSideMonitor, 0.2f, leftBody.getPosition().y - 0.125f,
-                0.5f, 0.25f);
 
         spriteBasketBack.setSize((rightBody.getPosition().x - leftBody.getPosition().x) + 2 * 0.5f, 1.5f);
         spriteBasketBack.setOriginCenter();
@@ -422,35 +447,26 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
         batch.draw(spriteBall, ballBody.getPosition().x - r, ballBody.getPosition().y - r,
                 r * 2, 2 * r);
 
-        if (round > 1) {
-            if (ballStored > 0) {
-                if (ballStored > 3) {
-                    currentJar = spriteBallJar[3];
-                    currentJar.setY(3f);
-                } else {
-                    currentJar = spriteBallJar[ballStored];
-                    currentJar.setY(3f);
-                }
-            } else {
-                currentJar = spriteBallJar[0];
-                currentJar.setY(3f);
-            }
-        } else {
-            if (ballStored > 0) {
-                if (ballStored > 3) {
-                    currentJar = spriteBallJar[3];
-                    currentJar.setY(3f);
-                } else {
-                    currentJar = spriteBallJar[ballStored];
-                    currentJar.setY(3f);
-                }
-            }
-        }
-
         if (shoot && ballBody.getLinearVelocity().y == 0 ||
                 (ballBody.getPosition().x + BALL_RADIOS < 0 || ballBody.getPosition().x - BALL_RADIOS > cam.viewportWidth)) {
-            if (ballRemain - ballShooted > 0) {
+            if (round == 1 && ballStored < 3) {
                 resetGame();
+            } else if (round == 2) {
+                if (ballRemain - ballShooted > 0) {
+                    resetGame();
+                } else {
+                    if (ballStored > 0) {
+
+                        ballRemain = ballStored;
+                        ballShooted = 0;
+                        ballStored = 0;
+                        round++;
+
+                        resetGame();
+                    } else {
+                        //game over
+                    }
+                }
             } else {
                 if (ballStored > 0) {
 
@@ -459,13 +475,31 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
                     ballStored = 0;
                     round++;
 
-//                    Tween.to(currentJar, SpriteAccessor.TYPE_Y, 10.0f)
-//                            .target(1f)
-//                            .start(manager);
-
                     resetGame();
                 } else {
                     //game over
+                }
+            }
+        }
+
+        if (round > 1) {
+            if (ballStored > 0) {
+                if (ballStored > 3) {
+                    currentJar = spriteBallJar[3];
+                } else {
+                    currentJar = spriteBallJar[ballStored];
+                }
+            } else {
+                currentJar = spriteBallJar[0];
+            }
+
+
+        } else {
+            if (ballStored > 0) {
+                if (ballStored > 3) {
+                    currentJar = spriteBallJar[3];
+                } else {
+                    currentJar = spriteBallJar[ballStored];
                 }
             }
         }
@@ -482,8 +516,8 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
             currentContainer.setY(1f);
         }
 
-        if (currentContainer != null) {
-            batch.draw(currentContainer, 0.5f, 0.5f, 2f, 1f);
+        if (currentContainer != null && round > 1) {
+            batch.draw(currentContainer, cam.viewportWidth - 2f, 0.5f, 1f, 2f);
         }
 
         if (topOfBasket) {
@@ -510,6 +544,9 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
 
         leftBody.getFixtureList().get(0).setSensor(true);
         rightBody.getFixtureList().get(0).setSensor(true);
+
+        leftLine.getFixtureList().get(0).setSensor(true);
+        rightLine.getFixtureList().get(0).setSensor(true);
 
         createBall();
 
@@ -632,12 +669,14 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
             if (topOfBasket) {
                 win = true;
                 ballStored++;
+                score++;
             }
 
         } else if (B.getBody().getUserData() == "BASKET") {
             if (topOfBasket) {
                 win = true;
                 ballStored++;
+                score++;
             }
 
         } else if (!A.isSensor() || !B.isSensor()) {
@@ -655,6 +694,10 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
             if (!topOfBasket) {
                 leftBody.getFixtureList().get(0).setSensor(false);
                 rightBody.getFixtureList().get(0).setSensor(false);
+
+                leftLine.getFixtureList().get(0).setSensor(false);
+                rightLine.getFixtureList().get(0).setSensor(false);
+
                 topOfBasket = true;
             } else {
                 groundFixTop.setSensor(false);
@@ -663,6 +706,8 @@ public class TestScale extends ApplicationAdapter implements GestureDetector.Ges
             if (!topOfBasket) {
                 leftBody.getFixtureList().get(0).setSensor(false);
                 rightBody.getFixtureList().get(0).setSensor(false);
+                leftLine.getFixtureList().get(0).setSensor(false);
+                rightLine.getFixtureList().get(0).setSensor(false);
                 topOfBasket = true;
             } else {
                 groundFixTop.setSensor(false);
